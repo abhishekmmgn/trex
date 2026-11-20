@@ -1,0 +1,12 @@
+# 05: Trackpad scroll fix, sent upstream
+
+**What to build:** Scrolling in a Browser Pane follows the trackpad's real distance, instead of jumping a fixed amount for every wheel event, which makes it far too fast. The change goes to KittyBrowser itself, made on a branch of the user's fork `abhishekmmgn/trex-browser`, following KittyBrowser's own contributing and testing conventions.
+
+**Blocked by:** None (can start immediately)
+
+**Status:** ready-for-agent
+
+- [ ] Scrolling with a Mac trackpad in Rex feels proportional; a mouse wheel still scrolls a sensible amount per notch
+- [ ] KittyBrowser's own tests and CI checks pass on the branch
+- [ ] The user has been asked, and agreed, before the pull request is opened on `graiz/kittybrowser`
+- [ ] The pull request is open upstream
