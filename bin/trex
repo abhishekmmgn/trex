@@ -1,0 +1,148 @@
+#!/bin/bash
+# trex's installer: adds or removes the marked trex block in Rex's config.
+#
+#   bin/trex install   [--config PATH] [--repo DIR]   add or update the block
+#   bin/trex uninstall [--config PATH]                remove it
+#   bin/trex block     [--repo DIR]                   print the block
+#
+# --config  the Rex config to edit. Default: $REX_CONFIG, else
+#           $XDG_CONFIG_HOME/rex/init.lua, else ~/.config/rex/init.lua.
+# --repo    the trex checkout the block loads its Lua from. Default: the main
+#           checkout of this repository (not a linked worktree).
+#
+# After writing, it runs `rex config check` on the file and puts the old file
+# back if the check fails. Only when the file is the live config does it then
+# run `rex config reload`.
+#
+# The block carries a hash of trex's Lua: the Rex app refetches palette actions
+# only when init.lua itself changes, so run `bin/trex install` again after
+# changing anything under lua/trex/.
+
+set -eu
+
+BEGIN='-- >>> trex >>>'
+END='-- <<< trex <<<'
+
+here=$(cd "$(dirname "$0")/.." && pwd)
+REX=${REX:-$(command -v rex || echo "$HOME/Library/Application Support/com.superlogical.rex/RexServer/Versions/Current/Rex Server.app/Contents/MacOS/rex")}
+
+die() { printf 'trex: %s\n' "$*" >&2; exit 1; }
+
+live_config() { printf '%s\n' "${REX_CONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/rex/init.lua}"; }
+
+main_checkout() {
+  local common
+  if common=$(git -C "$here" rev-parse --path-format=absolute --git-common-dir 2>/dev/null); then
+    dirname "$common"
+  else
+    printf '%s\n' "$here"
+  fi
+}
+
+lua_string() { # escapes $1 for a double-quoted Lua string
+  local s=${1//\\/\\\\}
+  printf '"%s"' "${s//\"/\\\"}"
+}
+
+block() { # REPO
+  local hash
+  hash=$(cat "$1"/lua/trex/*.lua 2>/dev/null | shasum -a 256 | cut -c1-16)
+  printf '%s\n' \
+    "$BEGIN" \
+    "-- Managed by \`$1/bin/trex install\`; \`$1/bin/trex uninstall\` removes it." \
+    "-- plugin: $hash" \
+    "dofile($(lua_string "$1/lua/trex/init.lua")).setup({})" \
+    "$END"
+}
+
+# Prints CONFIG with the trex block replaced by BLOCKFILE's text, in place; or
+# removed, along with the blank line before it, when BLOCKFILE is empty.
+# Exits 3 when CONFIG has no trex block.
+rewrite() { # CONFIG BLOCKFILE
+  awk -v begin="$BEGIN" -v end="$END" -v blockfile="$2" '
+    BEGIN { while ((getline line < blockfile) > 0) block = block line "\n" }
+    inblock { if ($0 == end) inblock = 0; next }
+    $0 == begin {
+      found = 1; inblock = 1
+      if (block != "") { if (blank) print ""; printf "%s", block }
+      blank = 0; next
+    }
+    { if (blank) print ""; blank = 0 }
+    $0 == "" { blank = 1; next }
+    { print }
+    END { if (blank) print ""; if (!found) exit 3 }
+  ' "$1"
+}
+
+# Writes CONTENT_FILE over CONFIG, checks it, and restores CONFIG on failure.
+commit() { # CONFIG CONTENT_FILE
+  local config=$1 new=$2 backup
+  if [ -f "$config" ] && cmp -s "$config" "$new"; then
+    printf 'trex: %s is already up to date.\n' "$config"
+    return 0
+  fi
+  backup=$(mktemp)
+  if [ -f "$config" ]; then cp "$config" "$backup"; else : >"$backup"; fi
+  mkdir -p "$(dirname "$config")"
+  cat "$new" >"$config"
+  if ! "$REX" config check "$config" >&2; then
+    cat "$backup" >"$config"
+    rm -f "$backup"
+    die "rex config check failed, so $config was put back as it was."
+  fi
+  rm -f "$backup"
+  printf 'trex: updated %s\n' "$config"
+  if [ "$config" -ef "$(live_config)" ]; then
+    "$REX" config reload >/dev/null 2>&1 || printf 'trex: run `rex config reload` to load it.\n' >&2
+  fi
+}
+
+cmd=${1:-}; [ $# -gt 0 ] && shift
+config=$(live_config)
+repo=
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --config) config=$2; shift 2 ;;
+    --repo) repo=$(cd "$2" 2>/dev/null && pwd || printf '%s' "$2"); shift 2 ;;
+    *) die "unknown option $1" ;;
+  esac
+done
+[ -n "$repo" ] || repo=$(main_checkout)
+
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+
+case "$cmd" in
+  block)
+    block "$repo"
+    ;;
+  install)
+    block "$repo" >"$tmp/block"
+    status=0
+    if [ -f "$config" ]; then rewrite "$config" "$tmp/block" >"$tmp/new" || status=$?; else status=3; fi
+    if [ "$status" = 3 ]; then
+      # No block yet: append it, a blank line after what's there.
+      if [ -s "${config}" ]; then
+        { cat "$config"; [ -z "$(tail -c1 "$config")" ] || echo; echo; cat "$tmp/block"; } >"$tmp/new"
+      else
+        cp "$tmp/block" "$tmp/new"
+      fi
+    elif [ "$status" != 0 ]; then
+      die "couldn't read $config"
+    fi
+    commit "$config" "$tmp/new"
+    ;;
+  uninstall)
+    [ -f "$config" ] || { printf 'trex: %s does not exist; nothing to remove.\n' "$config"; exit 0; }
+    : >"$tmp/empty"
+    status=0
+    rewrite "$config" "$tmp/empty" >"$tmp/new" || status=$?
+    if [ "$status" = 3 ]; then printf 'trex: no trex block in %s.\n' "$config"; exit 0; fi
+    [ "$status" = 0 ] || die "couldn't read $config"
+    commit "$config" "$tmp/new"
+    ;;
+  *)
+    sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//' >&2
+    exit 2
+    ;;
+esac
