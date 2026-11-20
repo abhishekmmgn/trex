@@ -14,7 +14,7 @@ See `GLOSSARY.md` for the terms (Browser Pane, DevTools Pane, Agent Pane, Elemen
 - **trex:** a Rex plugin in this repo. Like leaf, a marked block in `~/.config/rex/init.lua` `dofile()`s trex's Lua from this repo. It adds Rex actions and key bindings, plus helper scripts if Lua alone isn't enough.
 - **Upstream changes:** anything that needs kb's code goes to `graiz/kittybrowser` as a pull request from `abhishekmmgn/trex-browser`. We fork only if blocked (see ADR-0001).
 - **Removed (2026-11-21):** `terminal-browser` is gone entirely: its Rex actions, its `com.superlogical.rex.browser-action` and `dev.zenbu.terminal-browser` preferences, its launcher, the app, and its profile. The app and profile went to the macOS Trash.
-- **Tickets:** `.scratch/trex/issues/01`–`06`. 01 (Open Browser Pane) and 05 (upstream scroll PR) have no blockers.
+- **Tickets:** `.scratch/trex/issues/01`–`07`. 01 (Open Browser Pane) and 05 (upstream scroll PR) have no blockers.
 
 ## Phase 1: Browser Pane + DevTools Pane
 
