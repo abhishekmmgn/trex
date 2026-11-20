@@ -8,10 +8,13 @@ See `.scratch/trex/spec.md`, `GLOSSARY.md` and `docs/adr/`.
 - `lua/trex/init.lua`: the plugin. `setup(opts)` defines the Rex actions and key bindings. Its sibling modules load from the same directory.
   - `kb.lua`: KittyBrowser: binary path and the pinned-commit check.
   - `url.lua`: turns what the user typed into the address kb gets.
-  - `devtools.lua`: opens a DevTools Pane for a Browser Pane (block → kb → DevTools port → page target → inspector URL).
-  - `devtools-pane.sh`: the DevTools Pane's command. Runs the hidden DevTools kb and turns DevTools' screencast off before the inspector loads.
-  - `f12.lua`: the F12 binding. Uses only `rex.bind`/`rex.block.call`, so tests can load it as a client script.
-- `bin/trex`: adds or removes the marked block in Rex's config.
+  - `devtools.lua`: opens or closes a Browser Pane's DevTools Pane (block → kb → DevTools port → page target → inspector URL), on the remembered side.
+  - `devtools-pane.sh`: the DevTools Pane's command. Runs the hidden DevTools kb, turns DevTools' screencast off before the inspector loads, and
+    closes the pane when its Browser Pane closes.
+  - `f12.lua`: the F12 binding, and the notice it shows when something fails. Uses only `rex.bind`/`rex.session`/`rex.block.call`, so tests can load
+    it as a client script.
+  - `state.lua`: trex's saved state (`~/.local/state/trex/state.json`): the side DevTools was last on.
+- `bin/trex`: adds or removes the marked block in Rex's config. `bin/trex browser|ctl|mcp` (`bin/trex-agent`) are for agents, see Agents.
 - `tests/`: the `rex do` harness and the tests.
 
 ## Install
@@ -50,17 +53,50 @@ changing trex's Lua.
 
 ## Use
 
-- **trex: Open Browser…** (`cmd+shift+b`): asks for a URL (default `http://localhost:3000`) and opens a Browser Pane, `kb --devtools URL`, to the right
+- **Trex: Open Browser…** (`cmd+shift+b`): asks for a URL (default `http://localhost:3000`) and opens a Browser Pane, `kb --devtools URL`, to the right
   of the focused pane. An empty answer opens the default. A bare port such as `3000` or `:3000` opens `http://localhost:3000`. Input starting with `-`
   is refused, because kb would read it as a flag. If the installed kb isn't the pinned commit, it says so and doesn't open.
-- **F12** in a Browser Pane, or **trex: Open DevTools** from the palette: opens a DevTools Pane below it, with Chrome DevTools for that pane's page,
-  and leaves focus in the Browser Pane. The pane is labelled `trex devtools <kb id>`; if it is already open, F12 leaves it be. F12 in any pane running kb is always taken by trex, because kb's own F12 opens DevTools in a desktop Chrome
-  window (and can land in another kb's Chrome). F12 in any other pane reaches the program there unchanged.
+- **F12** in a Browser Pane, or **Trex: Toggle DevTools** from the palette: opens a DevTools Pane beside it, with Chrome DevTools for that pane's
+  page, and leaves focus in the Browser Pane. F12 again, in the Browser Pane or the DevTools Pane, closes it. The pane is labelled
+  `trex devtools <kb id>`.
+  - It opens below the Browser Pane at first. Move it (above, below, left or right of the Browser Pane) and close it with F12, and the next one opens
+    on that side. trex keeps the side in `~/.local/state/trex/state.json`.
+  - Closing the Browser Pane (or quitting its kb) closes its DevTools Pane: the DevTools Pane runs `rex wait` on the Browser Pane.
+  - F12 in any pane running kb is always taken by trex, because kb's own F12 opens DevTools in a desktop Chrome window (and can land in another kb's
+    Chrome). F12 in any other pane reaches the program there unchanged.
+  - When F12 can't do its work (say the kb was started without `--devtools`), it says why in a notice floating in front of the window; any key
+    closes it. The palette action reports the same message the usual way.
   - The DevTools Pane is a second kb, started with its own `KB_SOCKET` (`~/.kittybrowser/trex-devtools/<kb id>.sock`) and Chrome profile
     (`~/.kittybrowser/trex-devtools/<kb id>/`, removed when the pane closes). So `kb list`, plain `kb ctl` and `kb mcp` don't see it, and agents keep
     driving the Browser Pane. To reach it: `KB_SOCKET=~/.kittybrowser/trex-devtools/<kb id>.sock kb ctl status`.
   - It first loads `http://127.0.0.1:PORT/json/version`, sets `screencast-enabled=false` in that origin's localStorage (where DevTools keeps its
     settings), then opens the inspector, so DevTools never shows its page preview.
+
+## Agents
+
+A coding agent in an Agent Pane drives the Browser Pane beside it through `bin/trex` (logic in `bin/trex-agent`). Don't let it run plain `kb ctl`
+or a plain `kb mcp serve`: without `-i` they reach the lowest-numbered kb, which is often your own kb in some other session.
+
+```sh
+bin/trex browser            # prints the kb id of the Browser Pane beside this pane
+bin/trex ctl status         # kb ctl -i <that id> status; any kb ctl command works (check, eval, screenshot --out F, …)
+bin/trex ctl -i 3-a7f2 check   # name one yourself (ids from `kb list`)
+```
+
+"Beside this pane" is worked out on every call from the pane's `REX_SESSION` and `REX_BLOCK` (Rex sets them in every pane, and an agent's
+commands inherit them): the kb in `kb list` whose pane is in the same Rex window, else the only one in the same session. DevTools Panes' kbs are
+never picked (they aren't in `kb list`). With no Browser Pane, or two in the window, it prints why (and the ids to choose from) and exits 1, and
+never falls back to another kb. So a Browser Pane opened or reopened after the agent started is found without restarting anything.
+
+Setup, once:
+- Put `trex` on the agent's PATH, e.g. `ln -s "$PWD/bin/trex" ~/.local/bin/trex`, or give the agent the full path.
+- MCP (optional): `kb mcp on` (kb's own switch), then `claude mcp add kb -- "$PWD/bin/trex" mcp` instead of the `kb mcp serve` that
+  `kb mcp on` suggests. `trex mcp` is kb's MCP server with each tool call sent to the Browser Pane beside the agent at the time of the call.
+- Skill (optional): `kb skill install` teaches the agent kb's commands. Its own recipe opens a separate kb pane; tell the agent to use the
+  Browser Pane instead, for example in the project's `CLAUDE.md`/`AGENTS.md`:
+
+  > The browser is the trex Browser Pane beside you. Drive it with `trex ctl COMMAND` (same commands as `kb ctl`), never plain `kb ctl`.
+  > Don't open your own kb pane. If `trex ctl` says there are two Browser Panes, pick one with `trex ctl -i ID COMMAND`.
 
 ## Tests
 

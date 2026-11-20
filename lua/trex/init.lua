@@ -90,10 +90,10 @@ function M.setup(opts)
 
   rex.action{
     name = "trex_open",
-    title = "trex: Open Browser…",
+    title = "Trex: Open Browser…",
     description = "Open a URL or a localhost port in a Browser Pane (KittyBrowser with DevTools)"
       .. " to the right of this pane.",
-    category = "trex",
+    category = "Trex",
     keywords = "trex browser chrome chromium kb kittybrowser web localhost devtools url open",
     args = { url = "string?" },
     run = function(ctx, args)
@@ -117,15 +117,15 @@ function M.setup(opts)
   -- open; in a DevTools Pane, closes that.
   local function toggle_devtools(ctx)
     local result = devtools.toggle(ctx)
-    if result == nil then error("trex: this pane isn't a Browser Pane. Open one with trex: Open Browser….", 0) end
+    if result == nil then error("trex: this pane isn't a Browser Pane. Open one with Trex: Open Browser….", 0) end
     return result
   end
 
   rex.action{
     name = "trex_devtools",
-    title = "trex: Toggle DevTools",
+    title = "Trex: Toggle DevTools",
     description = "Open Chrome DevTools for this Browser Pane's page in a DevTools Pane, or close it if it is open.",
-    category = "trex",
+    category = "Trex",
     keywords = "trex devtools inspector inspect elements console network sources chrome kb f12 toggle close",
     run = toggle_devtools,
   }

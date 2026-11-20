@@ -27,8 +27,8 @@ installs_cleanly() { # CONFIG
   "$TREX_BIN" install --config "$1" --repo "$TREX_ROOT" >/dev/null 2>&1 || { fail "install into $1 failed"; return; }
   after=$(check_json "$1")
   assert_eq "[]" "$(printf '%s' "$after" | jq -c '.diagnostics')" "no complaints at all"
-  assert_eq "trex: Open Browser…" "$(printf '%s' "$after" | jq -r '.actions[] | select(.name == "trex_open") | .title')" "palette title"
-  assert_eq "trex: Open DevTools" "$(printf '%s' "$after" | jq -r '.actions[] | select(.name == "trex_devtools") | .title')" "DevTools palette title"
+  assert_eq "Trex: Open Browser…" "$(printf '%s' "$after" | jq -r '.actions[] | select(.name == "trex_open") | .title')" "palette title"
+  assert_eq "Trex: Toggle DevTools" "$(printf '%s' "$after" | jq -r '.actions[] | select(.name == "trex_devtools") | .title')" "DevTools palette title"
   assert_eq "$((before + 2))" "$(printf '%s' "$after" | jq '.bindings')" "two more key bindings (cmd+shift+b, f12)"
   assert_contains "$(cat "$1")" "dofile(\"$TREX_ROOT/lua/trex/init.lua\").setup(" "block loads trex from --repo"
 }
