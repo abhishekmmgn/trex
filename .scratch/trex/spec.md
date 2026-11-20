@@ -59,5 +59,5 @@ A pick mode, separate from the DevTools inspector. It sends a Cursor-style descr
 ## Verified so far
 
 - On 2026-11-21, stock kb `--devtools` plus a second kb on `inspector.html` gave a working DevTools Pane in Rex.
-  - The `screencastEnabled=false` setting in DevTools' localStorage removes the page preview.
+  - The `screencast-enabled=false` setting in DevTools' localStorage removes the page preview (Chrome 158; `screencastEnabled` does nothing). It is per DevTools origin, so it must be set again on every open because the port changes.
   - The user found the hover and tab switching fast.
