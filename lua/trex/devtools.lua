@@ -58,7 +58,7 @@ function M.new(opts)
     local port = kb.devtools_port(browser.n)
     if port == nil then
       error("trex: the KittyBrowser in this pane (" .. browser.id .. ") was started without DevTools."
-        .. " Open it with trex: Open Browser…, which runs kb --devtools.", 0)
+        .. " Open it with Trex: Open Browser…, which runs kb --devtools.", 0)
     end
     local target = page_target(port, browser.url)
     if target == nil then

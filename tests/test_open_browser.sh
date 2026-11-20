@@ -1,4 +1,4 @@
-# Ticket 01: "trex: Open Browser…" (action trex_open). Sourced by tests/run.sh.
+# Ticket 01: "Trex: Open Browser…" (action trex_open). Sourced by tests/run.sh.
 
 # Opens URL with trex_open and checks the Browser Pane: a new block to the right of
 # $ANCHOR, focused, running a kb that shows EXPECTED_URL. Sets $BROWSER.
