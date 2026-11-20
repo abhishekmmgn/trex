@@ -29,12 +29,14 @@ function M.setup(opts)
   local kb = load("kb").new{
     bin = opts.kb or (home .. "/.cargo/bin/kb"),
     crates2 = opts.crates2 or (home .. "/.cargo/.crates2.json"),
+    home = home,
   }
   local url = load("url")
+  local devtools = load("devtools").new{ kb = kb, script = DIR .. "/devtools-pane.sh" }
 
   -- Opens a Browser Pane: kb --devtools URL in a split right of the focused pane.
   local function open_browser(ctx, address)
-    local target, why = url.normalise(address)
+    local target, why = url.normalise(address, DEFAULT_URL)
     if target == nil then error(why, 0) end
     kb.check_pin()
 
@@ -81,6 +83,27 @@ function M.setup(opts)
     end,
   }
   rex.bind("cmd+shift+b", "trex_open")
+
+  -- DevTools for the focused Browser Pane, in a DevTools Pane below it.
+  local function open_devtools(ctx)
+    local result = devtools.open(ctx.block_id)
+    if result == nil then error("trex: this pane isn't a Browser Pane. Open one with trex: Open Browser….", 0) end
+    return result
+  end
+
+  rex.action{
+    name = "trex_devtools",
+    title = "trex: Open DevTools",
+    description = "Open Chrome DevTools for this Browser Pane's page in a DevTools Pane below it.",
+    category = "trex",
+    keywords = "trex devtools inspector inspect elements console network sources chrome kb f12",
+    run = open_devtools,
+  }
+
+  -- In config, rex.invoke reaches only actions of the file that defined them, so
+  -- the key calls the function rather than the action. In a DevTools Pane (its kb
+  -- isn't in `kb list`) F12 is consumed and does nothing yet.
+  load("f12")(function(ctx) devtools.open(ctx.block_id) end)
 end
 
 return M

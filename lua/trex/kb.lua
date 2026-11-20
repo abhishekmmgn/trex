@@ -42,7 +42,7 @@ local function installed(crates2)
 end
 
 function M.new(opts)
-  local kb = { bin = opts.bin, crates2 = opts.crates2 }
+  local kb = { bin = opts.bin, crates2 = opts.crates2, home = opts.home }
 
   -- Raises a message for the user unless the installed kb is the pinned commit.
   function kb.check_pin()
@@ -59,6 +59,33 @@ function M.new(opts)
     if not exists(kb.bin) then
       error("trex: KittyBrowser isn't installed at " .. kb.bin .. ". Install the pinned build: " .. INSTALL, 0)
     end
+  end
+
+  -- The kb running in Rex block `block_id`, as `kb list` shows it:
+  -- { n = instance number, url = its page, id = "N-xxxx" }; nil if none.
+  -- A DevTools Pane's kb has its own KB_SOCKET, so `kb list` never shows it.
+  function kb.in_block(block_id)
+    -- F12 runs this in a key function, which Rex gives 5 s in all.
+    local r = rex.exec({ kb.bin, "list" }, { timeout = 3 })
+    for line in ((r and r.stdout) or ""):gmatch("[^\n]+") do
+      local n, url, pane, id = line:match("^(%d+)\t([^\t]*)\t([^\t]*)\t([^\t]*)$")
+      if pane == block_id then return { n = tonumber(n), url = url, id = id } end
+    end
+    return nil
+  end
+
+  -- kb's data directory: its profiles and sockets, and trex's DevTools Pane files.
+  function kb.data_dir()
+    return kb.home .. "/.kittybrowser"
+  end
+
+  -- The DevTools port of kb instance `n`; nil if it was started without --devtools.
+  -- Instance 1's profile is `profile`, the others' `profile-N`. Chrome writes the
+  -- port on the first line of DevToolsActivePort there, and deletes it on exit.
+  function kb.devtools_port(n)
+    local profile = kb.data_dir() .. "/" .. (n == 1 and "profile" or ("profile-" .. n))
+    local text = read(profile .. "/DevToolsActivePort")
+    return text and text:match("^(%d+)")
   end
 
   return kb

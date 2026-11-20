@@ -56,8 +56,23 @@ test_rejects_input_that_looks_like_a_flag() {
   refuses "  -x example.com" "flag"
 }
 
-test_rejects_empty_input() {
-  refuses "   " "no URL"
+# An empty answer at the prompt opens the default, http://localhost:3000. Only the
+# action's result and the new pane are checked: whatever is (or isn't) on port 3000
+# is the user's.
+opens_the_default() { # ADDRESS
+  local before
+  before=$(block_ids | wc -l | tr -d ' ')
+  trex_do trex_open url="$1"
+  assert_status 0 "trex_open url=[$1]"
+  assert_eq "http://localhost:3000" "$(printf '%s' "$DO_OUT" | jq -r '.url // empty')" "url for [$1]"
+  local block; block=$(printf '%s' "$DO_OUT" | jq -r '.block_id // empty')
+  [ -n "$block" ] && BLOCKS_SEEN+=("$block")
+  assert_eq "$((before + 1))" "$(block_ids | wc -l | tr -d ' ')" "one new block for [$1]"
+}
+
+test_empty_input_opens_the_default_url() {
+  opens_the_default ""
+  opens_the_default "   "
 }
 
 # The pin check reads cargo's install record; these hand trex a made-up one.

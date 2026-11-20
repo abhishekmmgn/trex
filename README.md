@@ -8,6 +8,9 @@ See `.scratch/trex/spec.md`, `GLOSSARY.md` and `docs/adr/`.
 - `lua/trex/init.lua`: the plugin. `setup(opts)` defines the Rex actions and key bindings. Its sibling modules load from the same directory.
   - `kb.lua`: KittyBrowser: binary path and the pinned-commit check.
   - `url.lua`: turns what the user typed into the address kb gets.
+  - `devtools.lua`: opens a DevTools Pane for a Browser Pane (block → kb → DevTools port → page target → inspector URL).
+  - `devtools-pane.sh`: the DevTools Pane's command. Runs the hidden DevTools kb and turns DevTools' screencast off before the inspector loads.
+  - `f12.lua`: the F12 binding. Uses only `rex.bind`/`rex.block.call`, so tests can load it as a client script.
 - `bin/trex`: adds or removes the marked block in Rex's config.
 - `tests/`: the `rex do` harness and the tests.
 
@@ -35,8 +38,16 @@ changing trex's Lua.
 ## Use
 
 - **trex: Open Browser…** (`cmd+shift+b`): asks for a URL (default `http://localhost:3000`) and opens a Browser Pane, `kb --devtools URL`, to the right
-  of the focused pane. A bare port such as `3000` or `:3000` opens `http://localhost:3000`. Input starting with `-` is refused, because kb would read it
-  as a flag. If the installed kb isn't the pinned commit, it says so and doesn't open.
+  of the focused pane. An empty answer opens the default. A bare port such as `3000` or `:3000` opens `http://localhost:3000`. Input starting with `-`
+  is refused, because kb would read it as a flag. If the installed kb isn't the pinned commit, it says so and doesn't open.
+- **F12** in a Browser Pane, or **trex: Open DevTools** from the palette: opens a DevTools Pane below it, with Chrome DevTools for that pane's page,
+  and leaves focus in the Browser Pane. The pane is labelled `trex devtools <kb id>`; if it is already open, F12 leaves it be. F12 in any pane running kb is always taken by trex, because kb's own F12 opens DevTools in a desktop Chrome
+  window (and can land in another kb's Chrome). F12 in any other pane reaches the program there unchanged.
+  - The DevTools Pane is a second kb, started with its own `KB_SOCKET` (`~/.kittybrowser/trex-devtools/<kb id>.sock`) and Chrome profile
+    (`~/.kittybrowser/trex-devtools/<kb id>/`, removed when the pane closes). So `kb list`, plain `kb ctl` and `kb mcp` don't see it, and agents keep
+    driving the Browser Pane. To reach it: `KB_SOCKET=~/.kittybrowser/trex-devtools/<kb id>.sock kb ctl status`.
+  - It first loads `http://127.0.0.1:PORT/json/version`, sets `screencast-enabled=false` in that origin's localStorage (where DevTools keeps its
+    settings), then opens the inspector, so DevTools never shows its page preview.
 
 ## Tests
 
@@ -54,7 +65,10 @@ What the runner does:
   block `$ANCHOR`. It kills the session afterwards, which also quits every kb and Chrome in it.
 - It drives trex with `rex do tests/load.lua --action NAME -s $SESSION -b BLOCK url=…`. `tests/load.lua` loads `lua/trex/init.lua` from this checkout
   the way the config block does. So tests never read or change `~/.config/rex/init.lua`, except that `test_install.sh` copies it to a temp file.
-- At the end it checks that `kb list` shows no kb in any block the run created, and it stops the page server.
+- At the end it checks that `kb list` shows no kb in any block the run created, that no DevTools Pane kb still answers on its socket or left its
+  profile behind (`DEVTOOLS_SOCKETS`), and it stops the page server.
+- F12 is pressed through `rex do tests/f12.lua -b BLOCK`, which loads `lua/trex/f12.lua` as a client script on its own connection with a stub
+  handler, so the real config isn't involved. The kb pane in those tests is a re-signed copy of `cat` named `kb`, never a real kb.
 
 Writing a test: add `test_something() { … }` to a `tests/test_*.sh` file (or a new one). Use the helpers in `tests/lib.sh`: `trex_do`
 (sets `$DO_OUT`, `$DO_ERR`, `$DO_STATUS`), `block_ids`, `block_rect`, `focused_block`, `kb_row`, `kb_url`, and `assert_eq` / `assert_contains` /
@@ -62,6 +76,6 @@ Writing a test: add `test_something() { … }` to a `tests/test_*.sh` file (or a
 
 Rules for tests, because the user's own Rex and kb run on the same machine:
 - Always pass the action's arguments (for example `url=`). A missing one makes Rex show a prompt in the user's app.
-- Never send keys (F12 above all) to a kb pane in a session the test didn't create, and never run `kb ctl` / `kb mcp` without `-i ID`.
+- Never send keys (F12 above all) to a real kb pane, and never run `kb ctl` / `kb mcp` without `-i ID` or a DevTools Pane's `KB_SOCKET`.
 - Never run kb or Chrome with a fake `HOME` (it pops a macOS keychain dialog).
 - Don't edit, reload or `rex config reload` the live config. Use `bin/trex install --config <temp file>`.

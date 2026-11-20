@@ -21,12 +21,15 @@ check_json() { "$REX" config check --json "$1"; }
 # Installs into CONFIG and checks Rex loads it cleanly with trex's action and key.
 installs_cleanly() { # CONFIG
   local before after
+  # The live config may hold a trex block already; count without it.
+  "$TREX_BIN" uninstall --config "$1" >/dev/null 2>&1 || { fail "uninstall from $1 failed"; return; }
   before=$(check_json "$1" | jq '.bindings')
   "$TREX_BIN" install --config "$1" --repo "$TREX_ROOT" >/dev/null 2>&1 || { fail "install into $1 failed"; return; }
   after=$(check_json "$1")
   assert_eq "[]" "$(printf '%s' "$after" | jq -c '.diagnostics')" "no complaints at all"
   assert_eq "trex: Open Browser…" "$(printf '%s' "$after" | jq -r '.actions[] | select(.name == "trex_open") | .title')" "palette title"
-  assert_eq "$((before + 1))" "$(printf '%s' "$after" | jq '.bindings')" "one more key binding (cmd+shift+b)"
+  assert_eq "trex: Open DevTools" "$(printf '%s' "$after" | jq -r '.actions[] | select(.name == "trex_devtools") | .title')" "DevTools palette title"
+  assert_eq "$((before + 2))" "$(printf '%s' "$after" | jq '.bindings')" "two more key bindings (cmd+shift+b, f12)"
   assert_contains "$(cat "$1")" "dofile(\"$TREX_ROOT/lua/trex/init.lua\").setup(" "block loads trex from --repo"
 }
 

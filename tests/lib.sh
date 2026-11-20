@@ -33,6 +33,7 @@ TESTS_FAILED=0
 CURRENT_FAILED=0
 SESSIONS_CREATED=()
 BLOCKS_SEEN=()
+DEVTOOLS_SOCKETS=()   # control sockets of DevTools Pane kbs, which `kb list` doesn't show
 
 log() { printf '%s\n' "$*" >&2; }
 
@@ -168,7 +169,8 @@ run_test() { # FUNCTION
   fi
 }
 
-# Confirms that no kb the run started is still alive (they die with their session).
+# Confirms that no kb the run started is still alive (they die with their session),
+# including the DevTools Panes' kbs, which only answer on their own sockets.
 check_no_leftover_kbs() {
   local i list b leftover
   for i in $(seq 1 40); do
@@ -177,10 +179,15 @@ check_no_leftover_kbs() {
     for b in ${BLOCKS_SEEN[@]+"${BLOCKS_SEEN[@]}"}; do
       if printf '%s\n' "$list" | awk -F '\t' -v b="$b" '$3 == b {f=1} END {exit !f}'; then leftover="$leftover $b"; fi
     done
+    for b in ${DEVTOOLS_SOCKETS[@]+"${DEVTOOLS_SOCKETS[@]}"}; do
+      if [ -n "$b" ] && [ -S "$b" ] && KB_SOCKET=$b "$KB" ctl status >/dev/null 2>&1; then leftover="$leftover $b"; fi
+      # The pane removes its Chrome profile (next to the socket) when it closes.
+      if [ -n "$b" ] && [ -e "${b%.sock}" ]; then leftover="$leftover ${b%.sock}"; fi
+    done
     [ -z "$leftover" ] && return 0
     sleep 0.25
   done
-  log "WARNING: kbs still running in test blocks:$leftover"
+  log "WARNING: kbs still running in test blocks or on DevTools sockets:$leftover"
   return 1
 }
 

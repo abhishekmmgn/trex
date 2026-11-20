@@ -6,10 +6,11 @@
 
 local M = {}
 
--- The address for `input`; or nil and a message saying why it can't be opened.
-function M.normalise(input)
+-- The address for `input`, which is `default` when input is empty; or nil and a
+-- message saying why it can't be opened.
+function M.normalise(input, default)
   local text = tostring(input or ""):match("^%s*(.-)%s*$")
-  if text == "" then return nil, "trex: no URL given. Enter a URL or a localhost port." end
+  if text == "" then return default end
   -- kb reads any word starting with "-" as a flag, and has no "--" to stop that.
   if text:sub(1, 1) == "-" then
     return nil, ("trex: %q starts with \"-\", so KittyBrowser would read it as a flag."
