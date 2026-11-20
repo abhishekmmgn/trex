@@ -195,6 +195,20 @@ test_devtools_reopens_on_the_side_it_was_moved_to_above() {
   remembers_side vertical before above devtools
 }
 
+test_devtools_says_so_when_kb_was_started_without_devtools() {
+  local block before
+  block=$("$REX" split -s "$SESSION" -b "$ANCHOR" --split=right --focus=false --shell=none --json -- "$KB" "$PAGE_URL" |
+    jq -r '.block_ids[0] // empty')
+  [ -n "$block" ] || { fail "couldn't start kb without --devtools"; return; }
+  BLOCKS_SEEN+=("$block")
+  kb_row "$block" >/dev/null || { fail "kb list never showed the kb in $block"; return; }
+  before=$(block_ids | wc -l | tr -d ' ')
+  trex_do trex_devtools -b "$block"
+  [ "$DO_STATUS" != 0 ] || fail "trex_devtools succeeded: $DO_OUT"
+  assert_contains "$DO_ERR" "was started without DevTools" "error"
+  assert_eq "$before" "$(block_ids | wc -l | tr -d ' ')" "no new pane"
+}
+
 test_devtools_refuses_a_pane_that_is_not_a_browser_pane() {
   local before
   before=$(block_ids | wc -l | tr -d ' ')

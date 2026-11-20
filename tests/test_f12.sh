@@ -22,9 +22,12 @@ pane_running() { # NAME ARGV...
   return 1
 }
 
-press_f12() { # BLOCK  → sets $HANDLED
-  local out
-  out=$("$REX" do "$TREX_ROOT/tests/f12.lua" -s "$SESSION" -b "$1" --timeout 20s --json 2>&1) || { fail "f12.lua: $out"; return 1; }
+# Presses F12 in BLOCK. Given FAIL, trex's stub handler raises that message.
+press_f12() { # BLOCK [FAIL]  → sets $HANDLED
+  local out args='{}'
+  [ -n "${2:-}" ] && args=$(jq -nc --arg m "$2" '{fail: $m}')
+  out=$("$REX" do "$TREX_ROOT/tests/f12.lua" -s "$SESSION" -b "$1" --timeout 20s --json --args "$args" 2>&1) ||
+    { fail "f12.lua: $out"; return 1; }
   HANDLED=$(printf '%s' "$out" | jq -r '.handled')
 }
 
@@ -59,4 +62,27 @@ test_f12_is_consumed_in_a_pane_running_kb() {
   sleep 0.5
   case "$(screen "$block")" in *"[24~"*) fail "F12 reached the program in the kb pane" ;; esac
   rm -f "$dir/kb"; rmdir "$dir"
+}
+
+# A key function can't show a prompt or fail an action, so when F12's work fails
+# trex shows what went wrong in a notice in front of the window.
+test_f12_shows_what_went_wrong() {
+  local dir block notice msg="trex: the KittyBrowser in this pane (2-test) was started without DevTools."
+  dir=$(mktemp -d)
+  cp /bin/cat "$dir/kb"
+  /usr/bin/codesign --force -s - "$dir/kb" 2>/dev/null || { fail "couldn't sign the fake kb"; rm -rf "$dir"; return; }
+  block=$(pane_running kb "$dir/kb" -v) || { fail "no pane running the fake kb"; rm -rf "$dir"; return; }
+  press_f12 "$block" "$msg"
+  assert_eq "true" "$HANDLED" "F12 handled by trex"
+  notice=$("$REX" block ls -s "$SESSION" --json | jq -r '.blocks[] | select(.label == "trex notice") | .block_id' | head -n 1)
+  [ -n "$notice" ] || { fail "no trex notice pane"; rm -rf "$dir"; return; }
+  BLOCKS_SEEN+=("$notice")
+  sleep 0.5
+  assert_contains "$(screen "$notice" | tr -d '\n')" "started without DevTools" "the notice shows the message"
+  # Any key closes it. (The notice runs bash, never kb, so a key is safe here.)
+  "$REX" send -s "$SESSION" -b "$notice" x >/dev/null 2>&1
+  local i
+  for i in $(seq 1 20); do block_ids | grep -qx "$notice" || break; sleep 0.25; done
+  block_ids | grep -qx "$notice" && fail "the notice stayed open after a key"
+  rm -rf "$dir"
 }

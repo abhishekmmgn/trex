@@ -87,12 +87,21 @@ function M.new(opts)
   end
 
   -- The DevTools port of kb instance `n`; nil if it was started without --devtools.
-  -- Instance 1's profile is `profile`, the others' `profile-N`. Chrome writes the
-  -- port on the first line of DevToolsActivePort there, and deletes it on exit.
+  -- Instance 1's profile is `profile`, the others' `profile-N`. Chrome writes
+  -- DevToolsActivePort there: the port, then its browser endpoint
+  -- (/devtools/browser/<id>). A Chrome that is killed can leave the file behind,
+  -- and a kb without --devtools then finds it, so the port only counts if the
+  -- Chrome on it reports that same endpoint.
   function kb.devtools_port(n)
     local profile = kb.data_dir() .. "/" .. (n == 1 and "profile" or ("profile-" .. n))
     local text = read(profile .. "/DevToolsActivePort")
-    return text and text:match("^(%d+)")
+    local port, endpoint = (text or ""):match("^(%d+)\r?\n([^\r\n]+)")
+    if port == nil then return nil end
+    local r = rex.exec({ "/usr/bin/curl", "-s", "-m", "1", "http://127.0.0.1:" .. port .. "/json/version" }, { timeout = 2 })
+    local ok, version = pcall(rex.json.decode, (r and r.stdout) or "")
+    local ws = ok and type(version) == "table" and version.webSocketDebuggerUrl
+    if type(ws) ~= "string" or ws:sub(-#endpoint) ~= endpoint then return nil end
+    return port
   end
 
   return kb
