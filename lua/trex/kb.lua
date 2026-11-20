@@ -61,18 +61,25 @@ function M.new(opts)
     end
   end
 
-  -- The kb running in Rex block `block_id`, as `kb list` shows it:
-  -- { n = instance number, url = its page, id = "N-xxxx" }; nil if none.
-  -- A DevTools Pane's kb has its own KB_SOCKET, so `kb list` never shows it.
-  function kb.in_block(block_id)
+  -- The first kb in `kb list` whose `field` is `value`:
+  -- { n = instance number, url = its page, block = its Rex block, id = "N-xxxx" };
+  -- nil if none. A DevTools Pane's kb has its own KB_SOCKET, so `kb list` never shows it.
+  local function find(field, value)
     -- F12 runs this in a key function, which Rex gives 5 s in all.
     local r = rex.exec({ kb.bin, "list" }, { timeout = 3 })
     for line in ((r and r.stdout) or ""):gmatch("[^\n]+") do
       local n, url, pane, id = line:match("^(%d+)\t([^\t]*)\t([^\t]*)\t([^\t]*)$")
-      if pane == block_id then return { n = tonumber(n), url = url, id = id } end
+      local k = { n = tonumber(n), url = url, block = pane, id = id }
+      if n ~= nil and k[field] == value then return k end
     end
     return nil
   end
+
+  -- The kb running in Rex block `block_id`; nil if none.
+  function kb.in_block(block_id) return find("block", block_id) end
+
+  -- The kb `kb list` calls `id` ("N-xxxx"); nil if none.
+  function kb.by_id(id) return find("id", id) end
 
   -- kb's data directory: its profiles and sockets, and trex's DevTools Pane files.
   function kb.data_dir()

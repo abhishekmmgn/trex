@@ -90,21 +90,109 @@ test_devtools_opens_below_for_the_browser_panes_page() {
   open_devtools_and_check "$BROWSER" "$PAGE_URL"
 }
 
-# Until ticket 03 makes F12 close it, a second F12 leaves the open DevTools Pane alone.
-test_devtools_again_keeps_the_open_devtools_pane() {
-  local first before expected
+# Waits up to 20 s for the DevTools Pane BLOCK to be gone: no such block, no kb
+# answering on SOCKET, and its Chrome profile removed.
+devtools_gone() { # BLOCK SOCKET
+  local i
+  for i in $(seq 1 80); do
+    if ! block_ids | grep -qx "$1" && ! { [ -S "$2" ] && KB_SOCKET=$2 "$KB" ctl status >/dev/null 2>&1; } &&
+      [ ! -e "${2%.sock}" ]; then
+      return 0
+    fi
+    sleep 0.25
+  done
+  return 1
+}
+
+test_devtools_again_in_the_browser_pane_closes_it() {
   open_browser "$PAGE_URL" || return
   open_devtools_and_check "$BROWSER" "$PAGE_URL"
-  first=$DEVTOOLS
-  expected=$(expected_inspector "$BROWSER" "$PAGE_URL") || return
-  before=$(block_ids | wc -l | tr -d ' ')
   trex_do trex_devtools -b "$BROWSER"
   assert_status 0 "second trex_devtools"
-  assert_eq "$first" "$(printf '%s' "$DO_OUT" | jq -r '.block_id // empty')" "reports the open DevTools Pane"
-  sleep 2
-  assert_eq "$before" "$(block_ids | wc -l | tr -d ' ')" "no new pane"
-  assert_eq "$expected" "$(devtools_url "$DEVTOOLS_SOCKET" "$expected")" "the open DevTools Pane still answers"
-  [ -d "${DEVTOOLS_SOCKET%.sock}" ] || fail "the open DevTools Pane's profile was removed"
+  assert_eq "true" "$(printf '%s' "$DO_OUT" | jq -r '.closed // empty')" "reports it closed the DevTools Pane"
+  devtools_gone "$DEVTOOLS" "$DEVTOOLS_SOCKET" || fail "the DevTools Pane is still there"
+  assert_contains "$(block_ids)" "$BROWSER" "the Browser Pane stays open"
+
+  # And F12 a third time opens it again.
+  open_devtools_and_check "$BROWSER" "$PAGE_URL"
+}
+
+test_devtools_in_the_devtools_pane_closes_it() {
+  open_browser "$PAGE_URL" || return
+  open_devtools_and_check "$BROWSER" "$PAGE_URL"
+  trex_do trex_devtools -b "$DEVTOOLS"
+  assert_status 0 "trex_devtools in the DevTools Pane"
+  assert_eq "true" "$(printf '%s' "$DO_OUT" | jq -r '.closed // empty')" "reports it closed the DevTools Pane"
+  assert_eq "$BROWSER" "$(printf '%s' "$DO_OUT" | jq -r '.browser // empty')" "names its Browser Pane"
+  devtools_gone "$DEVTOOLS" "$DEVTOOLS_SOCKET" || fail "the DevTools Pane is still there"
+  assert_contains "$(block_ids)" "$BROWSER" "the Browser Pane stays open"
+}
+
+test_closing_the_browser_pane_closes_its_devtools_pane() {
+  open_browser "$PAGE_URL" || return
+  open_devtools_and_check "$BROWSER" "$PAGE_URL"
+  "$REX" block close -s "$SESSION" "$BROWSER" >/dev/null || { fail "couldn't close the Browser Pane"; return; }
+  devtools_gone "$DEVTOOLS" "$DEVTOOLS_SOCKET" || fail "the DevTools Pane outlived its Browser Pane"
+  assert_contains "$(block_ids)" "$ANCHOR" "the other pane stays open"
+}
+
+# The pane watching for its Browser Pane to close goes when the DevTools Pane does,
+# so toggling DevTools again and again leaves nothing running.
+test_closing_the_devtools_pane_leaves_no_watcher() {
+  open_browser "$PAGE_URL" || return
+  open_devtools_and_check "$BROWSER" "$PAGE_URL"
+  [ -n "$(/usr/bin/pgrep -f -- "wait -s $SESSION $BROWSER")" ] || fail "no watcher while the DevTools Pane is open"
+  trex_do trex_devtools -b "$DEVTOOLS"
+  devtools_gone "$DEVTOOLS" "$DEVTOOLS_SOCKET" || fail "the DevTools Pane is still there"
+  sleep 1
+  assert_eq "" "$(/usr/bin/pgrep -f -- "wait -s $SESSION" || true)" "rex wait processes for this session"
+}
+
+# Moves BLOCK into a new split on SIDE of ANCHOR, as the user would in Rex.
+move_block() { # BLOCK ANCHOR DIRECTION SIDE
+  "$REX" do -s "$SESSION" -e "local r, err = rex.session.move_block{ block_id = '$1', anchor_block_id = '$2',
+    direction = '$3', side = '$4' }; if r == nil then error(err, 0) end" >/dev/null ||
+    fail "couldn't move $1 to $3/$4 of $2"
+}
+
+# Where block B sits next to block A: right, left, below or above (or "?").
+side_of() { # A B
+  local ax ay aw ah bx by bw bh
+  read -r ax ay aw ah <<<"$(block_rect "$1")"
+  read -r bx by bw bh <<<"$(block_rect "$2")"
+  [ -n "${ah:-}" ] && [ -n "${bh:-}" ] || { echo "?"; return; }
+  if [ "$(echo "$bx == $ax + $aw && $by == $ay && $bh == $ah" | bc)" = 1 ]; then echo right
+  elif [ "$(echo "$ax == $bx + $bw && $by == $ay && $bh == $ah" | bc)" = 1 ]; then echo left
+  elif [ "$(echo "$by == $ay + $ah && $bx == $ax && $bw == $aw" | bc)" = 1 ]; then echo below
+  elif [ "$(echo "$ay == $by + $bh && $bx == $ax && $bw == $aw" | bc)" = 1 ]; then echo above
+  else echo "?"; fi
+}
+
+# The side the user moved the DevTools Pane to is where the next one opens, for
+# any Browser Pane, and closing it from either pane remembers it.
+remembers_side() { # DIRECTION SIDE EXPECTED CLOSE_FROM(browser|devtools)
+  open_browser "$PAGE_URL" || return
+  open_devtools_and_check "$BROWSER" "$PAGE_URL"
+  move_block "$DEVTOOLS" "$BROWSER" "$1" "$2"
+  assert_eq "$3" "$(side_of "$BROWSER" "$DEVTOOLS")" "DevTools Pane moved"
+  if [ "$4" = devtools ]; then trex_do trex_devtools -b "$DEVTOOLS"; else trex_do trex_devtools -b "$BROWSER"; fi
+  assert_eq "true" "$(printf '%s' "$DO_OUT" | jq -r '.closed // empty')" "closed it"
+  devtools_gone "$DEVTOOLS" "$DEVTOOLS_SOCKET" || { fail "the DevTools Pane is still there"; return; }
+
+  trex_do trex_devtools -b "$BROWSER"
+  assert_status 0 "reopen"
+  DEVTOOLS=$(printf '%s' "$DO_OUT" | jq -r '.block_id // empty')
+  DEVTOOLS_SOCKETS+=("$(printf '%s' "$DO_OUT" | jq -r '.socket // empty')")
+  BLOCKS_SEEN+=("$DEVTOOLS")
+  assert_eq "$3" "$(side_of "$BROWSER" "$DEVTOOLS")" "reopened DevTools Pane"
+}
+
+test_devtools_reopens_on_the_side_it_was_moved_to_right() {
+  remembers_side horizontal after right browser
+}
+
+test_devtools_reopens_on_the_side_it_was_moved_to_above() {
+  remembers_side vertical before above devtools
 }
 
 test_devtools_refuses_a_pane_that_is_not_a_browser_pane() {

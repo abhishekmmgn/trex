@@ -7,6 +7,8 @@
 -- setup(opts) options, all optional:
 --   kb       path of the kb binary (default ~/.cargo/bin/kb)
 --   crates2  cargo's install record, for the pin check (default ~/.cargo/.crates2.json)
+--   rex      path of the rex CLI (default: the one Rex's server runs from)
+--   state    trex's state file (default ~/.local/state/trex/state.json)
 --
 -- Config Lua runs in the Rex server: its PATH is only /usr/bin:/bin, and it has
 -- no rex.sleep or rex.on. Use absolute paths and keep actions short.
@@ -23,6 +25,28 @@ local function load(name)
   return dofile(DIR .. "/" .. name .. ".lua")
 end
 
+local function exists(path)
+  local f = io.open(path, "r")
+  if f == nil then return false end
+  f:close()
+  return true
+end
+
+-- The rex CLI. The server's PATH has no rex, so look where Rex installs it.
+local function find_rex(home)
+  local candidates = {
+    home .. "/Library/Application Support/com.superlogical.rex/RexServer/Versions/Current/Rex Server.app/Contents/MacOS/rex",
+    "/Applications/Rex Beta.app/Contents/Helpers/Rex Server.rex/Contents/MacOS/rex",
+    "/Applications/Rex.app/Contents/Helpers/Rex Server.rex/Contents/MacOS/rex",
+    "/opt/homebrew/bin/rex",
+    "/usr/local/bin/rex",
+  }
+  for _, path in ipairs(candidates) do
+    if exists(path) then return path end
+  end
+  return candidates[1]
+end
+
 function M.setup(opts)
   opts = opts or {}
   local home = os.getenv("HOME") or ""
@@ -32,7 +56,12 @@ function M.setup(opts)
     home = home,
   }
   local url = load("url")
-  local devtools = load("devtools").new{ kb = kb, script = DIR .. "/devtools-pane.sh" }
+  local devtools = load("devtools").new{
+    kb = kb,
+    script = DIR .. "/devtools-pane.sh",
+    rex = opts.rex or find_rex(home),
+    state = load("state")(opts.state or ((os.getenv("XDG_STATE_HOME") or (home .. "/.local/state")) .. "/trex/state.json")),
+  }
 
   -- Opens a Browser Pane: kb --devtools URL in a split right of the focused pane.
   local function open_browser(ctx, address)
@@ -84,26 +113,26 @@ function M.setup(opts)
   }
   rex.bind("cmd+shift+b", "trex_open")
 
-  -- DevTools for the focused Browser Pane, in a DevTools Pane below it.
-  local function open_devtools(ctx)
-    local result = devtools.open(ctx.block_id)
+  -- Opens a DevTools Pane for the focused Browser Pane, or closes it if it is
+  -- open; in a DevTools Pane, closes that.
+  local function toggle_devtools(ctx)
+    local result = devtools.toggle(ctx)
     if result == nil then error("trex: this pane isn't a Browser Pane. Open one with trex: Open Browser….", 0) end
     return result
   end
 
   rex.action{
     name = "trex_devtools",
-    title = "trex: Open DevTools",
-    description = "Open Chrome DevTools for this Browser Pane's page in a DevTools Pane below it.",
+    title = "trex: Toggle DevTools",
+    description = "Open Chrome DevTools for this Browser Pane's page in a DevTools Pane, or close it if it is open.",
     category = "trex",
-    keywords = "trex devtools inspector inspect elements console network sources chrome kb f12",
-    run = open_devtools,
+    keywords = "trex devtools inspector inspect elements console network sources chrome kb f12 toggle close",
+    run = toggle_devtools,
   }
 
   -- In config, rex.invoke reaches only actions of the file that defined them, so
-  -- the key calls the function rather than the action. In a DevTools Pane (its kb
-  -- isn't in `kb list`) F12 is consumed and does nothing yet.
-  load("f12")(function(ctx) devtools.open(ctx.block_id) end)
+  -- the key calls the function rather than the action.
+  load("f12")(toggle_devtools)
 end
 
 return M
