@@ -11,7 +11,7 @@ See `.scratch/trex/spec.md`, `GLOSSARY.md` and `docs/adr/`.
   - `devtools.lua`: opens a DevTools Pane for a Browser Pane (block → kb → DevTools port → page target → inspector URL).
   - `devtools-pane.sh`: the DevTools Pane's command. Runs the hidden DevTools kb and turns DevTools' screencast off before the inspector loads.
   - `f12.lua`: the F12 binding. Uses only `rex.bind`/`rex.block.call`, so tests can load it as a client script.
-- `bin/trex`: adds or removes the marked block in Rex's config.
+- `bin/trex`: adds or removes the marked block in Rex's config. `bin/trex browser|ctl|mcp` (`bin/trex-agent`) are for agents, see Agents.
 - `tests/`: the `rex do` harness and the tests.
 
 ## Install
@@ -61,6 +61,32 @@ changing trex's Lua.
     driving the Browser Pane. To reach it: `KB_SOCKET=~/.kittybrowser/trex-devtools/<kb id>.sock kb ctl status`.
   - It first loads `http://127.0.0.1:PORT/json/version`, sets `screencast-enabled=false` in that origin's localStorage (where DevTools keeps its
     settings), then opens the inspector, so DevTools never shows its page preview.
+
+## Agents
+
+A coding agent in an Agent Pane drives the Browser Pane beside it through `bin/trex` (logic in `bin/trex-agent`). Don't let it run plain `kb ctl`
+or a plain `kb mcp serve`: without `-i` they reach the lowest-numbered kb, which is often your own kb in some other session.
+
+```sh
+bin/trex browser            # prints the kb id of the Browser Pane beside this pane
+bin/trex ctl status         # kb ctl -i <that id> status; any kb ctl command works (check, eval, screenshot --out F, …)
+bin/trex ctl -i 3-a7f2 check   # name one yourself (ids from `kb list`)
+```
+
+"Beside this pane" is worked out on every call from the pane's `REX_SESSION` and `REX_BLOCK` (Rex sets them in every pane, and an agent's
+commands inherit them): the kb in `kb list` whose pane is in the same Rex window, else the only one in the same session. DevTools Panes' kbs are
+never picked (they aren't in `kb list`). With no Browser Pane, or two in the window, it prints why (and the ids to choose from) and exits 1, and
+never falls back to another kb. So a Browser Pane opened or reopened after the agent started is found without restarting anything.
+
+Setup, once:
+- Put `trex` on the agent's PATH, e.g. `ln -s "$PWD/bin/trex" ~/.local/bin/trex`, or give the agent the full path.
+- MCP (optional): `kb mcp on` (kb's own switch), then `claude mcp add kb -- "$PWD/bin/trex" mcp` instead of the `kb mcp serve` that
+  `kb mcp on` suggests. `trex mcp` is kb's MCP server with each tool call sent to the Browser Pane beside the agent at the time of the call.
+- Skill (optional): `kb skill install` teaches the agent kb's commands. Its own recipe opens a separate kb pane; tell the agent to use the
+  Browser Pane instead, for example in the project's `CLAUDE.md`/`AGENTS.md`:
+
+  > The browser is the trex Browser Pane beside you. Drive it with `trex ctl COMMAND` (same commands as `kb ctl`), never plain `kb ctl`.
+  > Don't open your own kb pane. If `trex ctl` says there are two Browser Panes, pick one with `trex ctl -i ID COMMAND`.
 
 ## Tests
 

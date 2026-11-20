@@ -5,6 +5,7 @@
 #   bin/trex uninstall [--config PATH]                remove it
 #   bin/trex setup     [--dry-run] [--yes]            install everything trex needs (see bin/trex-setup)
 #   bin/trex block     [--repo DIR]                   print the block
+#   bin/trex browser | ctl CMD | mcp                  for agents: reach the Browser Pane beside this pane (see bin/trex-agent)
 #
 # --config  the Rex config to edit. Default: $REX_CONFIG, else
 #           $XDG_CONFIG_HOME/rex/init.lua, else ~/.config/rex/init.lua.
@@ -22,6 +23,7 @@
 set -eu
 
 [ "${1:-}" = setup ] && { shift; exec "$(dirname "$0")/trex-setup" "$@"; }
+case "${1:-}" in browser | ctl | mcp) exec "$(dirname "$0")/trex-agent" "$@" ;; esac
 
 BEGIN='-- >>> trex >>>'
 END='-- <<< trex <<<'
@@ -145,7 +147,7 @@ case "$cmd" in
     commit "$config" "$tmp/new"
     ;;
   *)
-    sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//' >&2
+    sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//' >&2
     exit 2
     ;;
 esac

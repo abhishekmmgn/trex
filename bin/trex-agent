@@ -1,0 +1,103 @@
+#!/bin/bash
+# The agent side of trex: lets a coding agent in an Agent Pane reach the Browser
+# Pane beside it, never a DevTools Pane's kb or a kb somewhere else (the user's).
+# Run as `bin/trex browser|ctl|mcp`.
+#
+#   trex browser             print the kb id of the Browser Pane beside this pane
+#   trex ctl COMMAND [ARGS]  `kb ctl -i <that id> COMMAND ARGS`
+#   trex ctl -i ID COMMAND   `kb ctl -i ID COMMAND`, to pick one yourself
+#   trex mcp                 kb's MCP server (`kb mcp serve`), with each tool
+#                            call sent to the Browser Pane beside this pane
+#
+# "Beside this pane" means a kb in `kb list` whose pane is a block in this Rex
+# session ($REX_SESSION), preferring this pane's own window ($REX_BLOCK). With
+# none, or more than one in the window (or, with none in the window, in the
+# session), it says so and fails: it never falls back to plain `kb ctl`, which
+# reaches the lowest-numbered kb, often the user's own. DevTools Panes' kbs have
+# their own KB_SOCKET and aren't in `kb list`, so they are never picked.
+#
+# It is resolved again on every call, so it follows Browser Panes opened, closed
+# or reopened after the agent started.
+
+set -u
+
+KB=${KB:-$HOME/.cargo/bin/kb}
+REX=${REX:-$(command -v rex || echo "$HOME/Library/Application Support/com.superlogical.rex/RexServer/Versions/Current/Rex Server.app/Contents/MacOS/rex")}
+
+# KB_SOCKET would beat -i and KB_INSTANCE in kb, and send everything to one socket.
+unset KB_SOCKET KB_INSTANCE
+
+die() { printf 'trex: %s\n' "$*" >&2; exit 1; }
+
+# Prints "id<TAB>url" for each kb in `kb list` whose pane is one of BLOCKS (one per line).
+kbs_in() { # BLOCKS LIST
+  awk -F '\t' 'NR == FNR { want[$0] = 1; next } ($3 in want) && $4 != "" { print $4 "\t" $2 }' \
+    <(printf '%s\n' "$1") <(printf '%s\n' "$2")
+}
+
+# Prints the kb id of the Browser Pane beside this pane, or explains on stderr and fails.
+resolve() {
+  if [ -z "${REX_SESSION:-}" ] || [ -z "${REX_BLOCK:-}" ]; then
+    printf 'trex: REX_SESSION and REX_BLOCK are not set, so this is not a Rex pane and has no Browser Pane beside it. Use `kb ctl -i ID` with an id from `kb list`.\n' >&2
+    return 1
+  fi
+  local session_blocks window_blocks= w blocks list here all
+  session_blocks=$("$REX" block ls -s "$REX_SESSION" -q --short=false 2>/dev/null) ||
+    { printf "trex: couldn't list the blocks of Rex session %s.\n" "$REX_SESSION" >&2; return 1; }
+  for w in $("$REX" window ls -s "$REX_SESSION" -q 2>/dev/null); do
+    blocks=$("$REX" block ls -s "$REX_SESSION" -w "$w" -q --short=false 2>/dev/null)
+    if printf '%s\n' "$blocks" | grep -qxF "$REX_BLOCK"; then window_blocks=$blocks; break; fi
+  done
+  list=$("$KB" list 2>/dev/null)
+  here=$(kbs_in "$window_blocks" "$list")
+  all=$(kbs_in "$session_blocks" "$list")
+  [ -n "$here" ] || here=$all
+  case $(printf '%s' "$here" | grep -c .) in
+    1) printf '%s\n' "$here" | cut -f1 ;;
+    0)
+      printf 'trex: no Browser Pane in this Rex session. Open one with Trex: Open Browser… (cmd+shift+b).\n' >&2
+      return 1 ;;
+    *)
+      printf 'trex: more than one Browser Pane here, so name one with `trex ctl -i ID COMMAND` (or `kb ctl -i ID`):\n' >&2
+      printf '%s\n' "$here" | sed 's/^/  /' >&2
+      return 1 ;;
+  esac
+}
+
+# kb's MCP server, one `kb mcp serve` per message so that each tool call goes to
+# the Browser Pane beside this pane at the time of the call.
+mcp() {
+  local jq line method id
+  jq=$(command -v jq || echo /usr/bin/jq)
+  [ -x "$jq" ] || die "trex mcp needs jq."
+  MCP_ERR=$(mktemp)
+  trap 'rm -f "$MCP_ERR"' EXIT
+  while IFS= read -r line; do
+    method=$("$jq" -r '.method? // empty' <<<"$line" 2>/dev/null)
+    if [ "$method" != tools/call ]; then
+      printf '%s\n' "$line" | "$KB" mcp serve
+    elif id=$(resolve 2>"$MCP_ERR"); then
+      printf '%s\n' "$line" | KB_INSTANCE=$id "$KB" mcp serve
+    else
+      "$jq" -c --arg text "$(cat "$MCP_ERR")" \
+        '{jsonrpc: "2.0", id: .id, result: {content: [{type: "text", text: $text}], isError: true}}' <<<"$line"
+    fi
+  done
+}
+
+cmd=${1:-}; [ $# -gt 0 ] && shift
+case "$cmd" in
+  browser)
+    resolve ;;
+  ctl)
+    case "${1:-}" in
+      -i | --instance) exec "$KB" ctl "$@" ;;
+    esac
+    id=$(resolve) || exit 1
+    exec "$KB" ctl -i "$id" "$@" ;;
+  mcp)
+    mcp ;;
+  *)
+    sed -n '5,10p' "$0" | sed 's/^# \{0,1\}//' >&2
+    exit 2 ;;
+esac
