@@ -3,6 +3,7 @@
 #
 #   bin/trex install   [--config PATH] [--repo DIR]   add or update the block
 #   bin/trex uninstall [--config PATH]                remove it
+#   bin/trex setup     [--dry-run] [--yes]            install everything trex needs (see bin/trex-setup)
 #   bin/trex block     [--repo DIR]                   print the block
 #
 # --config  the Rex config to edit. Default: $REX_CONFIG, else
@@ -19,6 +20,8 @@
 # changing anything under lua/trex/.
 
 set -eu
+
+[ "${1:-}" = setup ] && { shift; exec "$(dirname "$0")/trex-setup" "$@"; }
 
 BEGIN='-- >>> trex >>>'
 END='-- <<< trex <<<'

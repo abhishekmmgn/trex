@@ -13,7 +13,20 @@ See `.scratch/trex/spec.md`, `GLOSSARY.md` and `docs/adr/`.
 
 ## Install
 
-The pinned KittyBrowser comes first:
+One command does everything (Rex must already be installed; trex only reports it if missing):
+
+```sh
+bin/trex setup              # cargo, Google Chrome, the pinned KittyBrowser, then the trex block
+bin/trex setup --dry-run    # print what it would do, change nothing
+bin/trex setup --yes        # also replace a kb at another commit (or a local build) without asking
+```
+
+Each requirement prints `ok` (already there), `installed`, `skipped` or `FAILED` with the reason. What is present is left alone, so rerunning changes nothing.
+cargo comes from an existing `cargo` (also `~/.cargo/bin/cargo`), else Homebrew's `rustup` if `brew` exists, else the official rustup installer.
+Chrome is detected in `/Applications` or `~/Applications`, else installed with `brew install --cask google-chrome`, else from Google's official dmg (no Homebrew needed).
+A kb at another commit is only replaced after you confirm. The pin lives in `lua/trex/kb.lua`; the logic is in `bin/trex-setup`.
+
+Or by hand. The pinned KittyBrowser comes first:
 
 ```sh
 cargo install --git https://github.com/graiz/kittybrowser --rev d252d5fe771f4d8f18fbf184d8239524b3ecda39 --force
