@@ -18,7 +18,7 @@ See `GLOSSARY.md` for the terms (Browser Pane, DevTools Pane, Agent Pane, Elemen
 
 ## Phase 1: Browser Pane + DevTools Pane
 
-1. **Open Browser.** "trex: Open Browser…" appears in the Rex command palette and is bound to `cmd+shift+b`. It asks for a URL (default `http://localhost:3000`) and runs `kb --devtools <url>` in a Rex split to the right of the focused pane.
+1. **Open Browser.** "Trex: Open Browser…" appears in the Rex command palette and is bound to `cmd+shift+b`. It asks for a URL (default `http://localhost:3000`) and runs `kb --devtools <url>` in a Rex split to the right of the focused pane.
 2. **DevTools Pane.** F12, bound in Rex:
    - **In a Browser Pane:** finds that pane's kb (`kb list` maps each kb to its Rex block) and reads its DevTools port (`profile-N/DevToolsActivePort`). It then opens `http://127.0.0.1:PORT/devtools/inspector.html?ws=127.0.0.1:PORT/devtools/page/<target>` in a second kb, split below, with DevTools' screencast turned off. Pressing F12 again closes it. trex remembers the last split side the user chose.
    - **In any other pane:** F12 passes through to the program unchanged.

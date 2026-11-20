@@ -1,12 +1,12 @@
 # 01: Open a Browser Pane from Rex
 
-**What to build:** From any Rex pane, the user runs "trex: Open Browser…" from the command palette or presses `cmd+shift+b`. They enter a URL (default `http://localhost:3000`), and a Browser Pane running the pinned KittyBrowser with DevTools enabled opens in a split to the right of the focused pane. This ticket also sets up the trex plugin: it is loaded from this repo through a marked block in the Rex config, the way leaf is. It also adds the test harness every later ticket uses: a throwaway Rex session, a local test page, and trex actions driven with `rex do`, with the URL passed as an argument so no prompt appears.
+**What to build:** From any Rex pane, the user runs "Trex: Open Browser…" from the command palette or presses `cmd+shift+b`. They enter a URL (default `http://localhost:3000`), and a Browser Pane running the pinned KittyBrowser with DevTools enabled opens in a split to the right of the focused pane. This ticket also sets up the trex plugin: it is loaded from this repo through a marked block in the Rex config, the way leaf is. It also adds the test harness every later ticket uses: a throwaway Rex session, a local test page, and trex actions driven with `rex do`, with the URL passed as an argument so no prompt appears.
 
 **Blocked by:** None (can start immediately)
 
 **Status:** ready-for-agent
 
-- [x] "trex: Open Browser…" appears in the Rex command palette, and `cmd+shift+b` runs it
+- [x] "Trex: Open Browser…" appears in the Rex command palette, and `cmd+shift+b` runs it
 - [x] Without an argument it prompts for a URL defaulting to `http://localhost:3000`; with a `url` argument it opens without prompting
 - [x] The Browser Pane opens as a split to the right of the focused pane and takes focus; `localhost:3000` and a bare port both work
 - [x] Input that starts with `-` is rejected rather than passed to KittyBrowser as a flag
@@ -22,11 +22,11 @@ Built: `lua/trex/` (`init.lua` with `setup()`, `kb.lua` with the pin check, `url
 (`tests/run.sh`, `tests/lib.sh`, `tests/load.lua`, `tests/site/`). README.md says how to run it. `tests/run.sh` passes 13/13.
 
 Left for a human (the two unticked boxes):
-- **Palette and `cmd+shift+b`:** `rex config check --json` on a config with the block lists `trex_open` titled "trex: Open Browser…" and one more
+- **Palette and `cmd+shift+b`:** `rex config check --json` on a config with the block lists `trex_open` titled "Trex: Open Browser…" and one more
   binding. Nobody has seen it in the app's palette or pressed `cmd+shift+b` on the keyboard yet. That needs the block in the live config
   (`bin/trex install`, after merging to the main checkout) and a look. An app-level shortcut on `cmd+shift+b` in Rex's own settings would win over init.lua.
 - **The prompt:** the `url=` path is tested (no prompt appears). The no-argument path (`rex.ui.input` with default `http://localhost:3000`) is untested,
-  because a prompt from `rex do` pops up in the user's own Rex app. Check by hand: palette → "trex: Open Browser…" → Enter.
+  because a prompt from `rex do` pops up in the user's own Rex app. Check by hand: palette → "Trex: Open Browser…" → Enter.
 
 Verified by hand: `bin/trex install --config <temp copy of ~/.config/rex/init.lua> --repo <this checkout>` → `rex config check` clean (11 actions,
 2 bindings, no diagnostics). `test_install_into_a_copy_of_the_live_config` repeats this on every run. Until this branch is merged into the main checkout, a

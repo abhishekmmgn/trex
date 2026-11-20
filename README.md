@@ -50,10 +50,10 @@ changing trex's Lua.
 
 ## Use
 
-- **trex: Open Browser…** (`cmd+shift+b`): asks for a URL (default `http://localhost:3000`) and opens a Browser Pane, `kb --devtools URL`, to the right
+- **Trex: Open Browser…** (`cmd+shift+b`): asks for a URL (default `http://localhost:3000`) and opens a Browser Pane, `kb --devtools URL`, to the right
   of the focused pane. An empty answer opens the default. A bare port such as `3000` or `:3000` opens `http://localhost:3000`. Input starting with `-`
   is refused, because kb would read it as a flag. If the installed kb isn't the pinned commit, it says so and doesn't open.
-- **F12** in a Browser Pane, or **trex: Open DevTools** from the palette: opens a DevTools Pane below it, with Chrome DevTools for that pane's page,
+- **F12** in a Browser Pane, or **Trex: Open DevTools** from the palette: opens a DevTools Pane below it, with Chrome DevTools for that pane's page,
   and leaves focus in the Browser Pane. The pane is labelled `trex devtools <kb id>`; if it is already open, F12 leaves it be. F12 in any pane running kb is always taken by trex, because kb's own F12 opens DevTools in a desktop Chrome
   window (and can land in another kb's Chrome). F12 in any other pane reaches the program there unchanged.
   - The DevTools Pane is a second kb, started with its own `KB_SOCKET` (`~/.kittybrowser/trex-devtools/<kb id>.sock`) and Chrome profile
