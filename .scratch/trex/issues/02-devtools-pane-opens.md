@@ -6,7 +6,7 @@
 
 **Status:** ready-for-agent
 
-- [ ] F12 in a Browser Pane opens a DevTools Pane below it, for that pane's page
+- [x] F12 in a Browser Pane opens a DevTools Pane below it, for that pane's page
 - [x] DevTools' screencast preview is off from the first paint, or at most after one automatic reload
 - [x] With two or more Browser Panes open, each one's F12 attaches DevTools to its own page
 - [x] A `rex do` test confirms the new pane and its target: the DevTools Pane's URL names the Browser Pane's page target on that KittyBrowser's DevTools port
@@ -49,3 +49,4 @@ Notes for ticket 03:
   `already_open = true` instead of opening a second (two would share one socket and profile; `test_devtools_again_keeps_the_open_devtools_pane`).
   That is the hook for toggle-close. `devtools-pane.sh` also refuses to start if another live pane holds the profile directory.
 - An empty `url=` in "trex: Open Browser…" now opens `http://localhost:3000` (user request), replacing the old "no URL given" refusal.
+- 2026-11-21: the user pressed a real `fn+F12` in a Browser Pane in the Rex app: the DevTools Pane opened below, for that page, with no screencast preview. Elements and Styles rendered. Inspector highlight and the other panels still to confirm.
