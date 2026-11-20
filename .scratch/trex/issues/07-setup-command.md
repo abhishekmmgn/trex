@@ -21,3 +21,4 @@
 
 - Unverified on a real machine: the brew and rustup-init install path, the rustup installer path, and the Chrome dmg download and copy (URL `https://dl.google.com/chrome/mac/universal/stable/GGRO/googlechrome.dmg`) were exercised only with stub commands. The Homebrew path assumes `rustup-init -y` is on PATH after `brew install rustup`.
 - The trex block step uses the real `bin/trex install`, so it also runs `rex config check` and reload. In the tests that is a stub rex and a temp config.
+- Orchestrator check (2026-11-21): Homebrew's `rustup` formula is **keg-only**, so after `brew install rustup` neither `rustup` nor `rustup-init` is on PATH. The brew path must call it via `$(brew --prefix rustup)/bin/` (and then make sure `~/.cargo/bin/cargo` is used). To fix in the review round.
