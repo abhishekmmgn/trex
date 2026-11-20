@@ -1,0 +1,155 @@
+#!/bin/bash
+# `bin/trex setup`: takes a Mac with Rex on it to a working trex. Installs what is
+# missing, leaves what is there alone, and can be run again safely.
+#
+#   bin/trex setup [--dry-run] [--yes] [--config PATH] [--repo DIR]
+#
+# Checks, in order: Rex (reported, never installed), cargo, Google Chrome, the
+# pinned KittyBrowser (ADR-0001), then the trex block in the Rex config
+# (`bin/trex install`). Each line says "ok" (already there), "installed",
+# "would" (--dry-run), "skipped" or "FAILED". Exits 1 if anything failed.
+#
+# --dry-run  print what would be done; change nothing
+# --yes      replace a KittyBrowser at another commit without asking
+#
+# The pinned commit is read from lua/trex/kb.lua, the one place it lives.
+# Test hook: TREX_APPLICATIONS (colon-separated dirs searched for Google Chrome.app).
+
+set -u
+
+here=$(cd "$(dirname "$0")/.." && pwd)
+REX=${REX:-$(command -v rex || echo "$HOME/Library/Application Support/com.superlogical.rex/RexServer/Versions/Current/Rex Server.app/Contents/MacOS/rex")}
+APP_DIRS=${TREX_APPLICATIONS:-/Applications:$HOME/Applications}
+CARGO_HOME_DIR=${CARGO_HOME:-$HOME/.cargo}
+
+KB_REPO=$(sed -n 's/^M\.REPO = "\(.*\)"$/\1/p' "$here/lua/trex/kb.lua")
+KB_PIN=$(sed -n 's/^M\.PIN = "\(.*\)"$/\1/p' "$here/lua/trex/kb.lua")
+[ -n "$KB_REPO" ] && [ -n "$KB_PIN" ] || { echo "trex setup: can't read the pinned kb commit from lua/trex/kb.lua" >&2; exit 1; }
+
+dry=0; yes=0; passthru=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --dry-run) dry=1; shift ;;
+    --yes|-y) yes=1; shift ;;
+    --config|--repo) passthru+=("$1" "$2"); shift 2 ;;
+    *) echo "trex setup: unknown option $1" >&2; exit 2 ;;
+  esac
+done
+
+failed=0
+say() { printf '%-18s %s\n' "$1" "$2"; }
+ok() { say "$1: ok" "$2"; }
+would() { say "$1: would" "$2"; }
+fail() { say "$1: FAILED" "$2"; failed=1; }
+
+# Runs a command, showing it; returns its status.
+run() { printf '  $ %s\n' "$*"; "$@"; }
+
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+
+# --- rex ------------------------------------------------------------------------
+if [ -x "$REX" ]; then
+  ok rex "found at $REX"; have_rex=1
+else
+  fail rex "not found. Install Rex first (trex doesn't install it), then run setup again."; have_rex=0
+fi
+
+# --- cargo ----------------------------------------------------------------------
+find_cargo() {
+  command -v cargo 2>/dev/null && return 0
+  [ -x "$CARGO_HOME_DIR/bin/cargo" ] && echo "$CARGO_HOME_DIR/bin/cargo"
+}
+cargo=$(find_cargo || true)
+if [ -n "$cargo" ]; then
+  ok cargo "found at $cargo"
+elif [ "$dry" = 1 ]; then
+  if command -v brew >/dev/null 2>&1; then would cargo "install Rust with: brew install rustup && rustup-init -y"
+  else would cargo "install Rust with the official rustup installer (https://sh.rustup.rs)"; fi
+else
+  if command -v brew >/dev/null 2>&1; then
+    run brew install rustup && run rustup-init -y --no-modify-path
+  else
+    printf '  $ curl https://sh.rustup.rs | sh -s -- -y\n'
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+  fi
+  cargo=$(find_cargo || true)
+  if [ -n "$cargo" ]; then say "cargo: installed" "$cargo"; else fail cargo "Rust installation didn't produce a cargo"; fi
+fi
+
+# --- Google Chrome --------------------------------------------------------------
+IFS=: read -r -a dirs <<<"$APP_DIRS"
+find_chrome() {
+  local d
+  for d in "${dirs[@]}"; do [ -d "$d/Google Chrome.app" ] && { echo "$d/Google Chrome.app"; return 0; }; done
+  return 1
+}
+chrome=$(find_chrome || true)
+if [ -n "$chrome" ]; then
+  ok chrome "found at $chrome"
+elif [ "$dry" = 1 ]; then
+  if command -v brew >/dev/null 2>&1; then would chrome "install with: brew install --cask google-chrome"
+  else would chrome "download Google's official dmg and copy Google Chrome.app to ${dirs[0]}"; fi
+else
+  if command -v brew >/dev/null 2>&1; then
+    run brew install --cask google-chrome
+  else
+    dmg="$tmp/googlechrome.dmg"; mnt="$tmp/mnt"; mkdir -p "$mnt"
+    if run curl -fL -o "$dmg" https://dl.google.com/chrome/mac/universal/stable/GGRO/googlechrome.dmg &&
+       run hdiutil attach -nobrowse -quiet -mountpoint "$mnt" "$dmg"; then
+      cp -R "$mnt/Google Chrome.app" "${dirs[0]}/" 2>/dev/null ||
+        { mkdir -p "$HOME/Applications" && cp -R "$mnt/Google Chrome.app" "$HOME/Applications/"; }
+      hdiutil detach -quiet "$mnt" >/dev/null 2>&1
+    fi
+  fi
+  chrome=$(find_chrome || true)
+  if [ -n "$chrome" ]; then say "chrome: installed" "$chrome"; else fail chrome "Google Chrome.app not found after installing"; fi
+fi
+
+# --- KittyBrowser ---------------------------------------------------------------
+crates2="$CARGO_HOME_DIR/.crates2.json"
+kb_bin="$CARGO_HOME_DIR/bin/kb"
+kb_key=$(grep -o '"kittybrowser [^"]*"' "$crates2" 2>/dev/null | head -n1 | tr -d '"')
+install_kb() {
+  if [ -z "$cargo" ]; then say "kb: skipped" "no cargo to build it with"; return; fi
+  if run "$cargo" install --git "$KB_REPO" --rev "$KB_PIN" --force; then
+    say "kb: installed" "pinned commit ${KB_PIN:0:8}"
+  else fail kb "cargo install failed"; fi
+}
+if [ -n "$kb_key" ] && [[ "$kb_key" == *"#$KB_PIN)" ]] && [ -x "$kb_bin" ]; then
+  ok kb "pinned commit ${KB_PIN:0:8} at $kb_bin"
+elif [ -z "$kb_key" ]; then
+  if [ "$dry" = 1 ]; then would kb "cargo install --git $KB_REPO --rev $KB_PIN"; else install_kb; fi
+else
+  source=${kb_key#*(}; source=${source%)}
+  if [ "$dry" = 1 ]; then
+    would kb "replace the installed KittyBrowser ($source) with the pinned commit ${KB_PIN:0:8} (asks first unless --yes)"
+  else
+    answer=n
+    if [ "$yes" = 1 ]; then answer=y
+    else
+      printf 'kb: the installed KittyBrowser is %s, not the pinned commit %s. Replace it? [y/N] ' "$source" "$KB_PIN"
+      read -r answer || [ -n "$answer" ] || answer=n
+    fi
+    case "$answer" in
+      y|Y|yes) install_kb ;;
+      *) say "kb: skipped" "left $source in place; trex refuses to open until it is the pinned commit (rerun with --yes)" ;;
+    esac
+  fi
+fi
+
+# --- trex block -----------------------------------------------------------------
+if [ "$have_rex" != 1 ]; then
+  say "trex block: skipped" "needs Rex"
+elif [ "$dry" = 1 ]; then
+  would "trex block" "run: bin/trex install ${passthru[*]:-}"
+elif out=$("$here/bin/trex" install ${passthru[@]+"${passthru[@]}"} 2>&1); then
+  case "$out" in
+    *"already up to date"*) ok "trex block" "already up to date" ;;
+    *) say "trex block: installed" "$(printf '%s' "$out" | head -n1)" ;;
+  esac
+else
+  fail "trex block" "$out"
+fi
+
+exit "$failed"

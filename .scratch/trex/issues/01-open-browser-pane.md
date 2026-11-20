@@ -6,8 +6,8 @@
 
 **Status:** ready-for-agent
 
-- [ ] "trex: Open Browser…" appears in the Rex command palette, and `cmd+shift+b` runs it
-- [ ] Without an argument it prompts for a URL defaulting to `http://localhost:3000`; with a `url` argument it opens without prompting
+- [x] "trex: Open Browser…" appears in the Rex command palette, and `cmd+shift+b` runs it
+- [x] Without an argument it prompts for a URL defaulting to `http://localhost:3000`; with a `url` argument it opens without prompting
 - [x] The Browser Pane opens as a split to the right of the focused pane and takes focus; `localhost:3000` and a bare port both work
 - [x] Input that starts with `-` is rejected rather than passed to KittyBrowser as a flag
 - [x] The installed KittyBrowser is checked against the pinned commit (see ADR-0001), and a mismatch is reported clearly
@@ -36,3 +36,4 @@ Notes for later tickets:
 - An empty URL is refused ("no URL given") rather than replaced with the default.
 - `kb list` can report the address kb was given (`http://localhost:N`, no trailing slash) until the page loads. Use `kb_url BLOCK EXPECTED`, which polls.
 - Tests pass test-only settings to `tests/load.lua` through the environment (e.g. `TREX_CRATES2`), because `rex do --action` rejects unknown `key=value` args.
+- 2026-11-21: the user confirmed in the Rex app that the palette entry, `cmd+shift+b` and the default-URL prompt work.
