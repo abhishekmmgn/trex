@@ -14,7 +14,7 @@ local util = ... -- util.lua, passed in by whoever loads this file
 local M = {}
 
 M.REPO = "https://github.com/abhishekmmgn/trex-browser"
-M.PIN = "1cc86f1863de596f771d509b15ee446cc3450b27"
+M.PIN = "b8ecc9d1b7b5f0287735668356593ea745c09a66"
 
 local INSTALL = "cargo install --git " .. M.REPO .. " --rev " .. M.PIN .. " --locked --force"
 
