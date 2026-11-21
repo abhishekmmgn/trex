@@ -93,7 +93,9 @@ changing trex's Lua.
     settings), then opens the inspector, so DevTools never shows its page preview.
 - **Trex: Pick Element** (`cmd+shift+e`), in a Browser Pane or a pane beside one: hover the page to outline elements, click one, and a description
   of it for a coding agent is copied to the clipboard (a note on the page says so). Esc, or the command again, stops. The click that picks never
-  reaches the page; the wheel still scrolls. The description:
+  reaches the page; the wheel still scrolls. An empty layer drawn over its parent (a ripple, a link overlay, such as YouTube's on its buttons)
+  gives way to that parent. `↑` outlines the parent of what is outlined and `↓` goes back toward the pointer; a click then picks what is
+  outlined. The description:
 
   ```
   <button id="save" class="btn primary">

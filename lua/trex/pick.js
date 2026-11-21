@@ -7,6 +7,11 @@
 // ignores the mouse. Capture listeners on window take the press and click that
 // pick, so the page never sees them; the wheel still scrolls. Esc cancels.
 //
+// An empty layer drawn over its parent (a ripple, a link overlay) gives way to
+// that parent, so hovering YouTube's Subscribe outlines the button, not its
+// ripple. ↑ outlines the parent of what is outlined, ↓ goes back toward the
+// element under the pointer.
+//
 // pick-wait.sh then calls globalThis.__trexPick.wait(ms) in a loop. It resolves
 // to "picked\n" + the description, "cancelled", or "pending" when `ms` passes
 // first (kb gives up on a request after 30 s, so each wait is shorter). If no
@@ -30,6 +35,31 @@
     return e;
   };
 
+  const parentOf = e => e.parentElement || (e.getRootNode() instanceof ShadowRoot ? e.getRootNode().host : null);
+
+  // Whether `e` shows nothing of its own: no text, no media, no background
+  // image, and no shadow root (whose content textContent doesn't see).
+  const MEDIA = 'img,svg,video,canvas,picture,iframe,object,embed,input,select,textarea';
+  const hollow = e => !e.shadowRoot && !(e.textContent || '').trim() && !e.matches(MEDIA) &&
+    !e.querySelector(MEDIA) && getComputedStyle(e).backgroundImage === 'none';
+  // Whether `e` covers at least half of `p`.
+  const covers = (e, p) => {
+    const a = e.getBoundingClientRect(), b = p.getBoundingClientRect();
+    return b.width * b.height > 0 && a.width * a.height >= 0.5 * b.width * b.height;
+  };
+
+  // The element a pick at a point means: the one there, or, while that is a
+  // hollow layer over its parent, the parent.
+  const target = (x, y) => {
+    let e = at(x, y);
+    while (e && hollow(e)) {
+      const p = parentOf(e);
+      if (!p || p === document.body || p === document.documentElement || !covers(e, p)) break;
+      e = p;
+    }
+    return e;
+  };
+
   // --- the outline -----------------------------------------------------------
 
   const root = document.createElement('div');
@@ -40,7 +70,7 @@
   const tag = 'background:#202124;color:#e8eaed;font:12px/20px ui-monospace,Menlo,monospace;padding:0 6px;' +
     'border-radius:3px;white-space:nowrap;max-width:90vw;overflow:hidden;text-overflow:ellipsis';
   hint.style.cssText = 'position:fixed;right:8px;bottom:8px;' + tag;
-  hint.textContent = 'Pick an element for the agent · Esc cancels';
+  hint.textContent = 'Pick an element for the agent · ↑ ↓ parent, child · Esc cancels';
   document.documentElement.appendChild(root);
 
   const px = v => Math.max(0, parseFloat(v) || 0);
@@ -117,6 +147,8 @@
   let lease = null;
   let swallowUntil = 0;     // after a pick, the rest of that click is swallowed too
   let frame = 0, lastX = 0, lastY = 0;
+  let base = null;          // target() under the pointer
+  let current = null;       // what is outlined and a click picks: base, or an ancestor chosen with ↑
 
   const stop = e => { e.preventDefault(); e.stopImmediatePropagation(); };
 
@@ -137,16 +169,40 @@
     if (frame) return;
     frame = requestAnimationFrame(() => {
       frame = 0;
-      const el = at(lastX, lastY);
-      if (el && !root.contains(el)) outline(el);
+      const el = target(lastX, lastY);
+      // A pointer that stays on the same element keeps what ↑ chose.
+      if (!el || root.contains(el) || el === base) return;
+      base = current = el;
+      outline(el);
     });
+  };
+
+  // ↑: the parent of what is outlined. ↓: its child on the way to the element
+  // under the pointer.
+  const climb = up => {
+    if (!current) return;
+    let next = null;
+    if (up) {
+      const p = parentOf(current);
+      if (p && p !== document.documentElement) next = p;
+    } else {
+      for (let e = at(lastX, lastY); e && e !== current; e = parentOf(e)) {
+        if (parentOf(e) === current) { next = e; break; }
+      }
+    }
+    if (next) { current = next; outline(next); }
   };
 
   const onPress = e => {
     if (result !== null) { if (performance.now() < swallowUntil) stop(e); return; }
     stop(e);
     if (e.button !== 0) return;
-    const el = at(e.clientX, e.clientY) || shown;
+    let el = current;
+    if (el) {
+      const r = el.getBoundingClientRect();
+      if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) el = null;
+    }
+    el = el || target(e.clientX, e.clientY) || shown;
     if (!el) return;
     outline(el);
     swallowUntil = performance.now() + 1000;
@@ -158,9 +214,8 @@
   };
 
   const onKey = e => {
-    if (e.key !== 'Escape') return;
-    stop(e);
-    finish('cancelled');
+    if (e.key === 'Escape') { stop(e); finish('cancelled'); }
+    else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') { stop(e); climb(e.key === 'ArrowUp'); }
   };
 
   // Removed as soon as pick mode ends.

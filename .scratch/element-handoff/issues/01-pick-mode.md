@@ -41,3 +41,12 @@
   - Not tested, true by construction: the wheel still scrolls (pick mode never listens to `wheel`), and navigating away ends pick mode (the
     outline, listeners and state live in the page's own JS, and the waiter exits when its eval fails and `__trexPick` is gone).
   - Not yet seen by a person: hovering and clicking with a real mouse in the Rex app.
+- 2026-11-21, after the user tried it on YouTube:
+  - `×` was copied as `√ó`: Rex runs the waiter with no locale, and pbcopy then reads its input as Mac Roman. Fixed: the waiter sets
+    `LC_CTYPE=UTF-8`; `test_pick_copies…` checks the copy command gets it (and fails without the fix).
+  - Hovering YouTube's buttons picked `div.ytSpecTouchFeedbackShapeFill`, an empty ripple layer stretched over the button. Now an element with no
+    text, media, background image or shadow root that covers at least half of its parent gives way to the parent, repeatedly (never past body).
+    `↑`/`↓` move the outline to the parent, or back toward the element under the pointer; a click inside what is outlined picks it. Tests:
+    `test_pick_skips_an_empty_layer_over_its_parent` (fails with the rule off), `test_pick_arrow_keys_choose_the_parent_and_back`. Checked live on
+    youtube.com: Subscribe now gives `…yt-button-shape > button`.
+  - Seen there: a very long opening tag (YouTube's 7 classes plus aria-label) fills the 300 characters, so the button's text is cut off.

@@ -136,6 +136,44 @@ test_pick_cuts_long_html() {
   pick_teardown
 }
 
+label_is() { # TEXT: waits for the outline's label to read TEXT
+  wait_for_page 'document.getElementById("__trex_pick")?.children[4].textContent' "$1" ||
+    fail "the label never read [$1] (it reads: $(page_eval 'document.getElementById("__trex_pick")?.children[4].textContent'))"
+}
+
+test_pick_skips_an_empty_layer_over_its_parent() {
+  pick_setup || { pick_teardown; return; }
+  start_pick
+  # .fill is on top, inside .ripple, both empty and covering the button.
+  assert_eq '<span class="fill">' "$(page_eval '(() => { document.querySelector("#sub").scrollIntoView({ block: "center" }); const r = document.querySelector(".fill").getBoundingClientRect(); const e = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2); return "<" + e.localName + " class=\"" + e.className + "\">"; })()')" \
+    "the fill is the element under the pointer"
+  "$KB" ctl -i "$BROWSER_ID" click '.fill' >/dev/null
+  wait_for_clip || { fail "nothing was copied after clicking .fill"; pick_teardown; return; }
+  assert_eq '<button id="sub" class="subscribe">' "$(head -n 1 "$CLIP")" "the button under the layer is picked"
+  assert_eq 'path: #sub' "$(sed -n 3p "$CLIP")" "its path"
+  pick_teardown
+}
+
+test_pick_arrow_keys_choose_the_parent_and_back() {
+  pick_setup || { pick_teardown; return; }
+  start_pick
+  "$KB" ctl -i "$BROWSER_ID" hover '#save' >/dev/null
+  label_is 'button#save.btn.primary  112 × 32'
+  "$KB" ctl -i "$BROWSER_ID" press ArrowUp >/dev/null
+  label_is "$(page_eval '(() => { const r = document.querySelector(".actions").getBoundingClientRect(); return "div.actions.toolbar.wide  " + Math.round(r.width) + " × " + Math.round(r.height); })()')"
+  "$KB" ctl -i "$BROWSER_ID" press ArrowDown >/dev/null
+  label_is 'button#save.btn.primary  112 × 32'
+  "$KB" ctl -i "$BROWSER_ID" press ArrowUp >/dev/null
+  label_is "$(page_eval '(() => { const r = document.querySelector(".actions").getBoundingClientRect(); return "div.actions.toolbar.wide  " + Math.round(r.width) + " × " + Math.round(r.height); })()')"
+  # The click lands on #save, inside the div ↑ chose, so the div is picked.
+  "$KB" ctl -i "$BROWSER_ID" click '#save' >/dev/null
+  wait_for_clip || { fail "nothing was copied after ↑ and a click"; pick_teardown; return; }
+  assert_eq '<div class="actions toolbar wide">' "$(head -n 1 "$CLIP")" "↑ then a click picks the parent"
+  assert_eq 'path: #app > form > div' "$(sed -n 3p "$CLIP")" "the parent's path"
+  assert_eq 0 "$(page_eval 'window.heard.keydown')" "the page didn't hear the arrows"
+  pick_teardown
+}
+
 test_pick_without_a_browser_pane_says_so() {
   trex_do trex_pick
   [ "$DO_STATUS" != 0 ] || fail "trex_pick with no Browser Pane succeeded: $DO_OUT"
