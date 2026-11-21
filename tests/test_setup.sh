@@ -207,6 +207,29 @@ test_setup_reports_a_failed_install() {
   done_world
 }
 
+# trex's config (ADR-0003): created filled with every default, never overwritten, and
+# its schema refreshed. Under the scratch HOME, so never ~/.config/trex.
+test_setup_creates_the_config_and_schema_without_overwriting() {
+  new_world; fake_chrome; fake_cargo; crates2 "$SETUP_SOURCE"
+  local dir=$T/home/.config/trex
+  run_setup; assert_status_code 0 "first run"
+  assert_contains "$OUT" "config: installed" "config created"
+  assert_eq "$(cat "$TREX_ROOT/lua/trex/config.default.json")" "$(cat "$dir/config.json")" "written out with every default"
+  assert_eq '"$schema"' "$(jq -c 'keys_unsorted[0]' "$dir/config.json")" "\$schema comes first"
+  assert_eq "./config.schema.json" "$(jq -r '.["$schema"]' "$dir/config.json")" "\$schema is a relative path"
+  assert_eq "$(cat "$TREX_ROOT/lua/trex/config.schema.json")" "$(cat "$dir/config.schema.json")" "schema copied next to it"
+  run_setup; assert_contains "$OUT" "config: ok" "nothing to do the second time"
+  printf '{ "open_in": "window" }\n' >"$dir/config.json"
+  printf 'old schema\n' >"$dir/config.schema.json"
+  run_setup; assert_status_code 0 "run with an edited config"
+  assert_eq '{ "open_in": "window" }' "$(cat "$dir/config.json")" "the user's config is left alone"
+  assert_eq "$(cat "$TREX_ROOT/lua/trex/config.schema.json")" "$(cat "$dir/config.schema.json")" "a stale schema is refreshed"
+  rm -rf "$dir"
+  run_setup --dry-run; assert_contains "$OUT" "config: would" "dry run plans it"
+  [ -e "$dir" ] && fail "dry run created $dir"
+  done_world
+}
+
 assert_status_code() { # EXPECTED MESSAGE  (checks $STATUS from run_setup)
   [ "$STATUS" = "$1" ] || fail "$2: exit status $STATUS, expected $1 (output: $OUT)"
 }

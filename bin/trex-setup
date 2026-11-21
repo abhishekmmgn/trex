@@ -5,8 +5,8 @@
 #   bin/trex setup [--dry-run] [--yes] [--config PATH] [--repo DIR]
 #
 # Checks, in order: Rex (reported, never installed), cargo, Google Chrome, the
-# pinned KittyBrowser (ADR-0001, ADR-0002), then the trex block in the Rex config
-# (`bin/trex install`). Each line says "ok" (already there), "installed",
+# pinned KittyBrowser (ADR-0001, ADR-0002), then trex's config file and schema
+# (ADR-0003), then the trex block in the Rex config (`bin/trex install`). Each line says "ok" (already there), "installed",
 # "would" (--dry-run), "skipped" or "FAILED". Exits 1 if anything failed,
 # including a kb at another commit or from another repo left in place.
 #
@@ -151,6 +151,24 @@ else
       *) fail kb "left $source in place. trex won't work until it is the pinned commit from $KB_REPO: rerun setup and answer y, or use --yes" ;;
     esac
   fi
+fi
+
+# --- trex config ----------------------------------------------------------------
+# $XDG_CONFIG_HOME/trex/config.json, written out with every default, and the schema
+# beside it. An existing config is the user's and is never touched; the schema is
+# ours, so it is refreshed when it differs.
+config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/trex"
+config_file="$config_dir/config.json"
+schema_src="$TREX_DIR/lua/trex/config.schema.json"
+if [ -f "$config_file" ] && cmp -s "$schema_src" "$config_dir/config.schema.json"; then
+  ok config "$config_file"
+elif [ "$dry" = 1 ]; then
+  would config "create $config_file and $config_dir/config.schema.json where missing or out of date"
+elif mkdir -p "$config_dir" && { [ -f "$config_file" ] || cp "$TREX_DIR/lua/trex/config.default.json" "$config_file"; } &&
+     cp "$schema_src" "$config_dir/config.schema.json"; then
+  say "config: installed" "$config_file"
+else
+  fail config "couldn't write to $config_dir"
 fi
 
 # --- trex block -----------------------------------------------------------------

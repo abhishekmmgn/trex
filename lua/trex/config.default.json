@@ -1,0 +1,11 @@
+{
+  "$schema": "./config.schema.json",
+  "default_url": "http://localhost:3000",
+  "open_in": "split",
+  "devtools": {
+    "side": "below"
+  },
+  "pick": {
+    "stay_on": true
+  }
+}

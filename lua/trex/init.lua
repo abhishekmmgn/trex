@@ -10,6 +10,7 @@
 --   rex      path of the rex CLI (default: the one Rex's server runs from)
 --   state    trex's state file (default ~/.local/state/trex/state.json)
 --   clipboard a command that copies its stdin, for Element Handoff (default /usr/bin/pbcopy)
+--   config   trex's config file (default $XDG_CONFIG_HOME/trex/config.json, else ~/.config/trex/config.json)
 --
 -- Config Lua runs in the Rex server: its PATH is only /usr/bin:/bin, and it has
 -- no rex.sleep or rex.on. Use absolute paths and keep actions short.
@@ -53,6 +54,15 @@ function M.setup(opts)
   local kb = kb_module.new{ bin = kb_bin, home = home }
   local url = load("url")
   local state_path = opts.state or ((os.getenv("XDG_STATE_HOME") or (home .. "/.local/state")) .. "/trex/state.json")
+  local config_path = opts.config or ((os.getenv("XDG_CONFIG_HOME") or (home .. "/.config")) .. "/trex/config.json")
+  -- The settings, read now and again by Trex: Reload Config. Other modules read one with
+  -- config.get("devtools.side"). The last good copy of the file sits beside the state file.
+  local config_module = load("config", util, DIR .. "/config.schema.json")
+  local config = config_module.new{
+    path = config_path,
+    last_good = state_path:gsub("[^/]*$", "") .. "last-good-config.json",
+  }
+  config.reload()
   local devtools = load("devtools", util, kb_module).new{
     kb = kb,
     script = DIR .. "/devtools-pane.sh",
@@ -151,6 +161,27 @@ function M.setup(opts)
     run = function(ctx) return pick.toggle(ctx) end,
   }
   rex.bind("cmd+shift+e", "trex_pick")
+
+  -- Makes the server use the config file's settings now. An invalid file is refused:
+  -- the last good settings stay, and the error says what is wrong. `trex config reload`
+  -- runs this with `rex do trex_reload_config`.
+  rex.action{
+    name = "trex_reload_config",
+    title = "Trex: Reload Config",
+    description = "Make trex use the settings in its config file now. If the file has problems, the last good settings stay.",
+    category = "Trex",
+    keywords = "trex config configuration settings reload refresh json",
+    run = function()
+      local result = config.reload()
+      if result.blocking then
+        local kept = result.source == "last-good" and "the last good settings" or "the defaults"
+        error("trex: " .. config_module.format(config_path, result) .. "\nKeeping " .. kept .. ".", 0)
+      end
+      local message = "trex: reloaded " .. config_path
+      if #result.problems > 0 then message = message .. ", but " .. config_module.format(config_path, result) end
+      return { message = message, settings = config.all() }
+    end,
+  }
 end
 
 return M

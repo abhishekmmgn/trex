@@ -23,8 +23,12 @@ See `.scratch/trex/spec.md`, `GLOSSARY.md` and `docs/adr/`.
     pick mode on or off by running `pick.js` in its page (`kb ctl -i ID eval`); `pick-wait.sh`, started in the background, waits for the pick and
     copies the description.
   - `state.lua`: trex's saved state (`~/.local/state/trex/state.json`): the side DevTools was last on.
+  - `config.lua`, `config.schema.json`, `config.default.json`, `config-check.lua`: trex's settings file, see Config. `config.lua` is a strict JSON
+    reader and a checker against the schema (the one place that says which settings there are and their defaults), and the settings the server
+    holds: `config.get("devtools.side")`. `config-check.lua` is the `rex do` script behind `trex config check`. `config.default.json` is the
+    file `trex setup` writes.
 - `bin/trex`: adds or removes the marked block in Rex's config. `bin/trex browser|ctl|mcp` (`bin/trex-agent`) are for agents, see Agents.
-  `bin/trex setup` is `bin/trex-setup`. `bin/trex-lib.sh` holds the shell helpers they and the tests share.
+  `bin/trex config` is `bin/trex-config`. `bin/trex setup` is `bin/trex-setup`. `bin/trex-lib.sh` holds the shell helpers they and the tests share.
 - `tests/`: the `rex do` harness and the tests.
 
 ## Install
@@ -32,7 +36,7 @@ See `.scratch/trex/spec.md`, `GLOSSARY.md` and `docs/adr/`.
 One command does everything (Rex must already be installed; trex only reports it if missing):
 
 ```sh
-bin/trex setup              # cargo, Google Chrome, the pinned KittyBrowser, then the trex block
+bin/trex setup              # cargo, Google Chrome, the pinned KittyBrowser, trex's config file, then the trex block
 bin/trex setup --dry-run    # print what it would do, change nothing
 bin/trex setup --yes        # also replace a kb at another commit, from another repo (or a local build) without asking
 ```
@@ -120,6 +124,25 @@ changing trex's Lua.
   - The outline and listeners live in the page, so a reload or navigation ends pick mode. If trex's waiter goes away, the page ends it by itself
     after 90 s. kb's own Inspect (`Ctrl+Shift+C`) is unchanged.
 
+## Config
+
+trex's settings are in `~/.config/trex/config.json` (`$XDG_CONFIG_HOME/trex/config.json`), next to `config.schema.json`, which gives editors
+completion, hover help and red squiggles (ADR-0003). `bin/trex setup` creates both with every default written out. It never overwrites an existing
+config, and it refreshes the schema. A missing file means all defaults, and a missing key gets its default. No setting changes behaviour yet.
+
+```json
+{ "$schema": "./config.schema.json", "default_url": "http://localhost:3000", "open_in": "split",
+  "devtools": { "side": "below" }, "pick": { "stay_on": true } }
+```
+
+- `bin/trex config check`: prints each problem with its key, the allowed values and its line (a syntax error gives its line), and exits 1 if there
+  are any. An unknown key is reported too. It is checked by `rex do lua/trex/config-check.lua`, the same code the server uses, so it needs Rex but
+  nothing else.
+- `bin/trex config reload`, or **Trex: Reload Config** in the palette: makes the running Rex use the file now. An invalid file is refused: the last
+  good settings stay, and it says what is wrong. An unknown key is reported, but the rest of the file applies.
+- trex reads the file whenever Rex loads its config (startup, `rex config reload`). The last good copy of the file is kept in
+  `~/.local/state/trex/last-good-config.json`, so the last good settings survive a Rex restart.
+
 ## Agents
 
 A coding agent in an Agent Pane drives the Browser Pane beside it through `bin/trex` (logic in `bin/trex-agent`). Don't let it run plain `kb ctl`
@@ -181,4 +204,8 @@ Rules for tests, because the user's own Rex and kb run on the same machine:
 - Always pass the action's arguments (for example `url=`), or `TREX_PROMPT`. Otherwise Rex shows a prompt in the user's app.
 - Never send keys (F12 above all) to a real kb pane, and never run `kb ctl` / `kb mcp` without `-i ID` or a DevTools Pane's `KB_SOCKET`.
 - Never run kb or Chrome with a fake `HOME` (it pops a macOS keychain dialog).
+- trex's own config is never the user's `~/.config/trex/`: every test gets `$TREX_CONFIG` (under its temp dir), which `tests/load.lua` hands to
+  `setup{ config = … }`, and `bin/trex config check` is run with a temp `XDG_CONFIG_HOME`. `bin/trex config reload` is pointed at the test's
+  session with `TREX_RELOAD_DO`. Tests that make Rex load trex (`rex config check`) set a temp `XDG_CONFIG_HOME` and `XDG_STATE_HOME`, so trex
+  reads and saves nothing of the user's.
 - Don't edit, reload or `rex config reload` the live config. Use `bin/trex install --config <temp file>`.
