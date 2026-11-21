@@ -41,9 +41,17 @@ if [ -n "$out" ]; then : >"$out"; else printf "mkdir -p \"\$HOME/.cargo/bin\"; c
   printf '#!/bin/bash\necho "cargo $*" >>"$LOG"\n%s\n' "$CARGO_BODY" >"$T/cargo-template"; chmod +x "$T/cargo-template"
 }
 
+# Homebrew's rustup is keg-only: `brew install rustup` puts rustup-init under
+# `brew --prefix rustup`, not on PATH. This brew does the same.
 with_brew() {
-  stub brew 'case "$*" in "install --cask google-chrome") mkdir -p "'"$T"'/apps/Google Chrome.app";; esac'
-  stub rustup-init 'mkdir -p "$HOME/.cargo/bin"; cp "'"$T"'/cargo-template" "$HOME/.cargo/bin/cargo"'
+  stub brew 'case "$*" in
+  "install --cask google-chrome") mkdir -p "'"$T"'/apps/Google Chrome.app";;
+  "install rustup") mkdir -p "'"$T"'/keg/rustup/bin"; cp "'"$T"'/rustup-init-template" "'"$T"'/keg/rustup/bin/rustup-init";;
+  "--prefix rustup") echo "'"$T"'/keg/rustup";;
+esac'
+  printf '#!/bin/bash\necho "rustup-init $*" >>"$LOG"\nmkdir -p "$HOME/.cargo/bin"; cp "%s/cargo-template" "$HOME/.cargo/bin/cargo"\n' "$T" \
+    >"$T/rustup-init-template"
+  chmod +x "$T/rustup-init-template"
 }
 
 # Runs setup with the fake world; sets $OUT and $STATUS. Input comes from $ANSWER.
@@ -90,9 +98,13 @@ test_setup_with_brew_uses_rustup_and_the_cask() {
   run_setup; assert_status_code 0 "run with brew"
   local log; log=$(cat "$LOG")
   assert_contains "$log" "brew install rustup" "homebrew rustup"
+  assert_contains "$log" "rustup-init -y --no-modify-path" "rustup-init from the keg"
+  assert_contains "$OUT" "cargo: installed" "cargo installed"
+  assert_contains "$OUT" "$T/home/.cargo/bin/cargo" "the cargo rustup-init made"
   assert_contains "$log" "brew install --cask google-chrome" "homebrew cask"
   case "$log" in *curl*) fail "curl was not needed with brew: $log" ;; esac
   assert_contains "$OUT" "kb: installed" "kb installed"
+  assert_contains "$log" "cargo install --git" "kb built with that cargo"
   done_world
 }
 
@@ -109,12 +121,25 @@ test_setup_finds_cargo_outside_path() {
 test_setup_kb_at_wrong_commit_is_kept_unless_confirmed() {
   new_world; fake_chrome; fake_cargo; with_brew
   crates2 "git+https://github.com/graiz/kittybrowser#0000000000000000000000000000000000000000"
-  ANSWER=n; run_setup; assert_status_code 0 "declined"
-  assert_contains "$OUT" "kb: skipped" "reported and left alone"
+  ANSWER=n; run_setup; assert_status_code 1 "declined"
+  assert_contains "$OUT" "kb: FAILED" "reported and left alone"
+  assert_contains "$OUT" "trex won't work until" "says trex needs the pin"
   case "$(cat "$LOG")" in *"cargo install"*) fail "installed despite no confirmation" ;; esac
   ANSWER=y; run_setup; assert_status_code 0 "confirmed"
   assert_contains "$OUT" "kb: installed" "replaced after y"
   assert_contains "$(cat "$LOG")" "cargo install --git" "cargo ran"
+  done_world
+}
+
+# The record says the pin is installed but ~/.cargo/bin/kb is gone: put it back
+# without asking, since nothing else would be replaced.
+test_setup_reinstalls_a_missing_pinned_kb() {
+  new_world; fake_chrome; fake_cargo; crates2 "git+https://github.com/graiz/kittybrowser#$SETUP_PIN"
+  rm "$T/home/.cargo/bin/kb"
+  run_setup; assert_status_code 0 "run"
+  assert_contains "$OUT" "kb: installed" "reinstalled"
+  case "$OUT" in *eplace*) fail "talks of replacing another commit: $OUT" ;; esac
+  assert_contains "$(cat "$LOG")" "cargo install --git https://github.com/graiz/kittybrowser --rev $SETUP_PIN" "the pin"
   done_world
 }
 
@@ -129,6 +154,7 @@ test_setup_dry_run_changes_nothing() {
   new_world; with_brew
   run_setup --dry-run; assert_status_code 0 "dry run"
   assert_contains "$OUT" "cargo: would" "cargo planned"
+  assert_contains "$OUT" '$(brew --prefix rustup)/bin/rustup-init' "keg-only rustup-init"
   assert_contains "$OUT" "chrome: would" "chrome planned"
   assert_contains "$OUT" "kb: would" "kb planned"
   assert_contains "$OUT" "trex block: would" "block planned"
