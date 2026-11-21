@@ -4,9 +4,9 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-human
+**Status:** resolved
 
-- [ ] "Trex: Pick Element" is in the palette and bound to a key that isn't kb's Inspect key. `cmd+shift+e` is proposed. Check it isn't taken by a Rex app shortcut, and record what was checked
+- [x] "Trex: Pick Element" is in the palette and bound to a key that isn't kb's Inspect key. `cmd+shift+e` is proposed. Check it isn't taken by a Rex app shortcut, and record what was checked
 - [x] Works from a Browser Pane, and from another pane with a Browser Pane beside it (resolved like `bin/trex browser`). Anywhere else it says there's no Browser Pane
 - [x] Hovering outlines margin, border, padding and content with a label, in a layer that ignores the mouse. Shadow DOM is followed, as in kb's `HOVER`
 - [x] The click that picks doesn't reach the page: no `pointerdown`, `mousedown`, `click` or focus change on the page. The wheel still scrolls
@@ -55,3 +55,4 @@
     elements). Spec's "The description" updated. Tests: `test_pick_names_the_web_components_around`, `test_pick_shortens_long_attributes`, and
     the text line in the existing ones (9/9). Live on YouTube, Subscribe gives `in: <yt-button-shape> in <yt-smartimation> in
     <ytd-subscribe-button-renderer>`, `text: Subscribe` and the whole `html:` line.
+- 2026-11-21: the user confirmed `cmd+shift+e` works in the Rex app. Resolved.

@@ -29,7 +29,9 @@ ctl() { "$kb" ctl -i "$id" "$@"; }
 # Shows TEXT in a note on the page. TEXT must not hold a double quote.
 note() { ctl eval "globalThis.__trexPickNote?.(\"$1\")" >/dev/null 2>&1; }
 
-# Pastes JSON_TEXT (a JSON string) into the Agent Pane and focuses it. A paste,
+# Pastes JSON_TEXT (a JSON string) into the Agent Pane. Focus stays in the
+# Browser Pane, so the user can pick more elements; each pick adds to what
+# waits unsent in the agent's input. A paste,
 # so a program with bracketed paste on (Claude Code, Codex, Cursor) gets it as
 # pasted text and its newlines don't send it. Only if an agent still runs
 # there: it may have quit since the pick began, and a shell would run the text.
@@ -37,9 +39,7 @@ paste_to_agent() { # JSON_TEXT
   "$rex" block call -s "$session" --block "$agent" process 2>/dev/null |
     grep -Eq '"argv0":"([^"]*/)?(claude|codex|cursor-agent|agent)"' || return 1
   printf '{"session_id":"%s","block_id":"%s","event":{"type":"paste","payload":{"text":%s}}}' \
-    "$session" "$agent" "$1" | "$rex" api call block.event - >/dev/null 2>&1 || return 1
-  "$rex" focus -s "$session" "$agent" >/dev/null 2>&1
-  return 0
+    "$session" "$agent" "$1" | "$rex" api call block.event - >/dev/null 2>&1
 }
 
 while :; do

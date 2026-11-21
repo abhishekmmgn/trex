@@ -257,7 +257,7 @@ note_says() { # TEXT: waits for a note on the page containing TEXT
     fail "no note on the page says [$1]"
 }
 
-test_pick_pastes_into_the_agent_pane_unsent_and_focuses_it() {
+test_pick_pastes_into_the_agent_pane_unsent_and_keeps_focus() {
   pick_setup || { pick_teardown; return; }
   start_agent "$ANCHOR" || { pick_teardown; return; }
   start_pick
@@ -268,7 +268,8 @@ test_pick_pastes_into_the_agent_pane_unsent_and_focuses_it() {
   wait_for_clip || fail "nothing was copied"
   # Exactly one bracketed paste of the description and a newline; no Enter after it.
   assert_eq "$(printf '\e[200~%s\n\e[201~' "$(cat "$CLIP")" | od -c)" "$(od -c <"$AGENT_LOG")" "the agent got the description as one paste, unsent"
-  assert_eq "$AGENT" "$(focused_block)" "focus moved to the Agent Pane"
+  # Focus stays in the Browser Pane, for the next pick.
+  assert_eq "$BROWSER" "$(focused_block)" "focus stayed in the Browser Pane"
   note_says "Sent to Claude Code and copied"
   pick_teardown
 }

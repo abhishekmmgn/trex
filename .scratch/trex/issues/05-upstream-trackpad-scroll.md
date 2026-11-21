@@ -16,3 +16,4 @@
 - 2026-11-21: pushed to the fork only (`origin` = `abhishekmmgn/trex-browser`), branch `trackpad-scroll-delta` (9671b44). No PR. trex now pins `trex-pin` (1cc86f1), which contains it (ADR-0002).
 - 2026-11-21: the user asked for the upstream PR; opened https://github.com/graiz/KittyBrowser/pull/14 (together with 09's fixes, branch scroll-quality).
 - Trackpad confirmed by the user. A mouse wheel has not been tried by hand.
+- 2026-11-21: the user tests on the MacBook's trackpad only and has no mouse wheel, so the mouse-wheel half of the first box is untried.

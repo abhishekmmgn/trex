@@ -9,7 +9,7 @@
 - [x] Find out whether a Rex Lua plugin can hear focus changes (`rex.on` or server events). If it can, trex remembers the last focused pane per window. If not, use the fallback (the only other pane in the window, else clipboard only) and record what was found. **Changed with the user: the Agent Pane is found by what runs in it (Claude Code, Codex, Cursor), see Comments**
 - [x] The description reaches the Agent Pane as a paste (`block.event`), so a program with bracketed paste on gets the paste markers and nothing is submitted
 - [x] Checked by hand in Claude Code: the multi-line description shows up in the prompt unsent
-- [x] Focus moves to the Agent Pane after the paste
+- [x] ~~Focus moves to the Agent Pane after the paste~~ Focus stays in the Browser Pane (the user's decision, see Comments)
 - [x] With no Agent Pane, the description goes to the clipboard only, and trex says so without taking focus (like F12's error notice)
 - [x] The clipboard copy from ticket 01 still happens in every case
 - [x] `rex do` tests: a stub program in the Agent Pane turns on bracketed paste and logs its input (paste markers present, no Enter after them); focus ends on it; with only a Browser Pane in the window, clipboard only
@@ -32,3 +32,5 @@
     loses the name), which turns on bracketed paste and logs its input: one exact paste with no Enter after it, focus moved; run from one of
     two agents goes there; two agents from the Browser Pane only copies; an agent in another window is reached; a shell is never typed
     into; an agent that quit before the click isn't pasted into. Full suite 69/69.
+- 2026-11-21: the user decided focus stays in the Browser Pane after a pick, because they may want to pick more elements. The waiter no
+  longer runs `rex focus`; each pick's paste adds to what waits unsent in the agent's input. The test now checks focus stays on the Browser Pane.

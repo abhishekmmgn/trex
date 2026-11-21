@@ -18,7 +18,7 @@ The user points at something in a Browser Pane and tells the coding agent "chang
 1. **Start.** The command works from a Browser Pane, or from any other pane with a Browser Pane beside it (resolved the way `bin/trex browser` does it). In the second case the pane the command ran from is the Agent Pane. Running it again while picking cancels.
 2. **Pick mode.** trex adds an overlay to the Browser Pane's page through kb's control socket (`kb ctl -i ID eval`, which waits on a promise). The overlay is drawn the way kb's own Inspect is (`src/app.rs`, `HOVER`): margin, border, padding and content boxes plus a label, in a layer that ignores the mouse. Capture-phase listeners on the page take pointer moves, presses and clicks, so the page never sees the click that picks. The wheel still scrolls. Esc cancels. Navigating away ends pick mode.
 3. **Describe.** On click, the page builds the description below from the element and returns it. The React part is found from the element at that moment (`__reactFiber$…` on the DOM node), so it works on any open page. The app doesn't have to include react-grab, and no reload is needed.
-4. **Hand off.** trex pastes the description into the Agent Pane with a paste event (`block.event`). Claude Code, Codex and Cursor's CLI all turn on bracketed paste, so they get it as pasted text and the newlines don't send it (Claude Code shows it as `[Pasted text #1 +7 lines]`). Just before pasting, trex checks an agent still runs there, so it never types into a shell. It also copies the description to the clipboard and moves focus to the Agent Pane (switching tabs if needed). If there is no Agent Pane, the description only goes to the clipboard, and the note on the page says why.
+4. **Hand off.** trex pastes the description into the Agent Pane with a paste event (`block.event`). Claude Code, Codex and Cursor's CLI all turn on bracketed paste, so they get it as pasted text and the newlines don't send it (Claude Code shows it as `[Pasted text #1 +7 lines]`). Just before pasting, trex checks an agent still runs there, so it never types into a shell. It also copies the description to the clipboard. Focus stays in the Browser Pane (decided 2026-11-21: the user may pick several elements; each pick adds to what waits unsent in the agent's input). If there is no Agent Pane, the description only goes to the clipboard, and the note on the page says why.
 
 ## The description
 
@@ -68,7 +68,7 @@ The same seam as Phase 1: trex actions driven with `rex do` in a throwaway Rex s
 ## Tickets
 
 - `01` Pick mode, and the description without React (command, key, overlay, Esc, clipboard)
-- `02` Hand off to the Agent Pane (focus tracking, paste, focus move), blocked by 01
+- `02` Hand off to the Agent Pane (finding it, paste), blocked by 01
 - `03` React components and source location, blocked by 01
 - `04` Upstream: a tools menu in kb's bar that runs Element Handoff, blocked by 01, needs-triage
 
@@ -79,6 +79,3 @@ The same seam as Phase 1: trex actions driven with `rex do` in a throwaway Rex s
 - Components from frameworks other than React (Vue, Svelte, Solid).
 - A screenshot of the element.
 
-## Open questions
-
-- Should focus move to the Agent Pane after the handoff? The spec says yes, so the user can type their request at once. Confirm once it's in use.

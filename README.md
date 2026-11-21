@@ -92,8 +92,8 @@ changing trex's Lua.
   - It first loads `http://127.0.0.1:PORT/json/version`, sets `screencast-enabled=false` in that origin's localStorage (where DevTools keeps its
     settings), then opens the inspector, so DevTools never shows its page preview.
 - **Trex: Pick Element** (`cmd+shift+e`), in a Browser Pane or a pane beside one: hover the page to outline elements, click one, and a description
-  of it is pasted, unsent, into the pane running Claude Code, Codex or Cursor's CLI, which takes focus, and copied to the clipboard (a note on
-  the page says which). The agent pane is the one the command ran from if an agent runs there, else the one in the Browser Pane's tab, else
+  of it is pasted, unsent, into the pane running Claude Code, Codex or Cursor's CLI, and copied to the clipboard (a note on the page says
+  which). Focus stays in the Browser Pane, so you can pick more: each pick adds to what waits in the agent's input. The agent pane is the one the command ran from if an agent runs there, else the one in the Browser Pane's tab, else
   in the session; of several, the one last focused in its tab. With none, or several, it is only copied. trex checks the agent is still running
   before pasting, so it never types into a shell. Esc, or the command again, stops. The click that picks never
   reaches the page; the wheel still scrolls. An empty layer drawn over its parent (a ripple, a link overlay, such as YouTube's on its buttons)
