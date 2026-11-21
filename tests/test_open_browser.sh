@@ -76,7 +76,7 @@ test_empty_input_opens_the_default_url() {
 }
 
 # The pin check reads cargo's install record; these hand trex a made-up one.
-PIN=d252d5fe771f4d8f18fbf184d8239524b3ecda39
+PIN=$(sed -n 's/^M\.PIN = "\(.*\)"$/\1/p' "$TREX_ROOT/lua/trex/pin.lua")
 
 fake_crates2() { # INSTALL_KEY...  → path of a crates2.json listing those installs
   local file; file=$(mktemp)

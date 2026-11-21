@@ -17,13 +17,19 @@
 local here = debug.getinfo(1, "S").source:gsub("^@", "")
 local root = here:match("^(.*)/tests/[^/]*$")
 
-local f = assert(io.open(root .. "/lua/trex/f12.lua", "r"))
-local binding = f:read("*a")
-f:close()
+local function source_of(name)
+  local f = assert(io.open(root .. "/lua/trex/" .. name .. ".lua", "r"))
+  local text = f:read("*a")
+  f:close()
+  return text
+end
 
+-- Client scripts have no loadfile either, so the modules go in as text, each
+-- wrapped in a function called the way init.lua's load() calls the file.
 local fail = rex.args and rex.args.fail
 local source = "local FAIL = " .. (fail and ("%q"):format(fail) or "nil") .. "\n"
-  .. "local bind = (function()\n" .. binding .. "\nend)()\n" .. [[
+  .. "local util = (function(...)\n" .. source_of("util") .. "\nend)()\n"
+  .. "local bind = (function(...)\n" .. source_of("f12") .. "\nend)(util)\n" .. [[
 bind(function(ctx)
   if FAIL ~= nil then error(FAIL, 0) end
   rex.session.set_block_label{ block_id = ctx.block_id, label = "trex f12" }

@@ -1,76 +1,55 @@
--- KittyBrowser (`kb`), the Base Browser trex runs as shipped (ADR-0001).
+-- Running KittyBrowsers (`kb`, the Base Browser, ADR-0001): which kb is in which
+-- Rex block (`kb list`), what it shows (`kb ctl status`), and its DevTools port
+-- and page targets. The one place trex reads kb's text output.
 --
--- trex depends on kb's outside surface (flags, `kb list`, `kb ctl`, its profile
--- layout), so it runs only the commit it was built against. kb's binary has no
--- commit in it (`kb --version` is just 0.1.0); cargo's install record
--- (~/.cargo/.crates2.json) is the only place that says which commit
--- `cargo install` built.
+-- Loaded as loadfile("kb.lua")(util). Returns M; M.new{ bin, home } → kb.
+
+local util = ... -- util.lua, passed in by whoever loads this file
 
 local M = {}
 
-M.REPO = "https://github.com/graiz/kittybrowser"
-M.PIN = "d252d5fe771f4d8f18fbf184d8239524b3ecda39"
-
-local INSTALL = "cargo install --git " .. M.REPO .. " --rev " .. M.PIN .. " --force"
-
-local function read(path)
-  local f = io.open(path, "r")
-  if f == nil then return nil end
-  local text = f:read("*a")
-  f:close()
-  return text
+-- The URL of Chrome DevTools for page target `target` on DevTools port `port`,
+-- the same form kb's own F12 builds.
+function M.inspector_url(port, target)
+  return ("http://127.0.0.1:%s/devtools/inspector.html?ws=127.0.0.1:%s/devtools/page/%s"):format(port, port, target)
 end
 
-local function exists(path)
-  local f = io.open(path, "r")
-  if f == nil then return false end
-  f:close()
-  return true
+-- Whether two page URLs are the same, ignoring a trailing "/": kb reports the
+-- address it was given (http://localhost:3000) until the page loads, Chrome the
+-- loaded one (http://localhost:3000/).
+local function same_url(a, b)
+  return (a or ""):gsub("/$", "") == (b or ""):gsub("/$", "")
 end
 
--- The install-record key for kittybrowser, such as
--- "kittybrowser 0.1.0 (git+https://github.com/graiz/kittybrowser#<sha>)"; nil if none.
-local function installed(crates2)
-  local text = read(crates2)
-  if text == nil then return nil end
-  local ok, record = pcall(rex.json.decode, text)
-  if not ok or type(record) ~= "table" or type(record.installs) ~= "table" then return nil end
-  for key in pairs(record.installs) do
-    if key:match("^kittybrowser ") then return key end
-  end
-  return nil
-end
-
+-- opts: bin (path of kb), home (whose ~/.kittybrowser to look in).
 function M.new(opts)
-  local kb = { bin = opts.bin, crates2 = opts.crates2, home = opts.home }
+  local kb = { bin = opts.bin, home = opts.home }
 
-  -- Raises a message for the user unless the installed kb is the pinned commit.
-  function kb.check_pin()
-    local key = installed(kb.crates2)
-    if key == nil then
-      error("trex: KittyBrowser isn't installed (cargo has no record of it in " .. kb.crates2
-        .. "). Install the pinned build: " .. INSTALL, 0)
-    end
-    if not key:find("#" .. M.PIN .. ")", 1, true) then
-      local source = key:match("%((.*)%)$") or key
-      error("trex: the installed KittyBrowser isn't the pinned commit " .. M.PIN
-        .. ". Installed: " .. source .. ". Reinstall the pinned build: " .. INSTALL, 0)
-    end
-    if not exists(kb.bin) then
-      error("trex: KittyBrowser isn't installed at " .. kb.bin .. ". Install the pinned build: " .. INSTALL, 0)
-    end
+  -- Runs `kb ARGS` for a Browser Pane's kb. Never with the DevTools Pane's
+  -- KB_SOCKET, which beats -i.
+  local function run(args, timeout)
+    local argv = { kb.bin }
+    for _, a in ipairs(args) do argv[#argv + 1] = a end
+    return rex.exec(argv, { timeout = timeout, env = { KB_SOCKET = false, KB_INSTANCE = false } })
   end
 
-  -- The first kb in `kb list` whose `field` is `value`:
-  -- { n = instance number, url = its page, block = its Rex block, id = "N-xxxx" };
-  -- nil if none. A DevTools Pane's kb has its own KB_SOCKET, so `kb list` never shows it.
-  local function find(field, value)
+  -- Every kb in `kb list`: { n = instance number, url = its page, block = its
+  -- Rex block, id = "N-xxxx" }. A DevTools Pane's kb has its own KB_SOCKET, so
+  -- `kb list` never shows it.
+  function kb.list()
     -- F12 runs this in a key function, which Rex gives 5 s in all.
-    local r = rex.exec({ kb.bin, "list" }, { timeout = 3 })
+    local r = run({ "list" }, 3)
+    local rows = {}
     for line in ((r and r.stdout) or ""):gmatch("[^\n]+") do
-      local n, url, pane, id = line:match("^(%d+)\t([^\t]*)\t([^\t]*)\t([^\t]*)$")
-      local k = { n = tonumber(n), url = url, block = pane, id = id }
-      if n ~= nil and k[field] == value then return k end
+      local n, url, block, id = line:match("^(%d+)\t([^\t]*)\t([^\t]*)\t([^\t]*)$")
+      if n ~= nil then rows[#rows + 1] = { n = tonumber(n), url = url, block = block, id = id } end
+    end
+    return rows
+  end
+
+  local function find(field, value)
+    for _, k in ipairs(kb.list()) do
+      if k[field] == value then return k end
     end
     return nil
   end
@@ -80,6 +59,19 @@ function M.new(opts)
 
   -- The kb `kb list` calls `id` ("N-xxxx"); nil if none.
   function kb.by_id(id) return find("id", id) end
+
+  -- What kb `id` shows: { url, title, windows = the `windows:` line }; nil if
+  -- it doesn't answer.
+  function kb.status(id)
+    local r = run({ "ctl", "-i", id, "status" }, 2)
+    if r == nil or not r.ok then return nil end
+    local text = r.stdout
+    return {
+      url = text:match("\nurl: ([^\n]*)") or text:match("^url: ([^\n]*)"),
+      title = text:match("\ntitle: ([^\n]*)") or text:match("^title: ([^\n]*)"),
+      windows = text:match("\nwindows: ([^\n]*)"),
+    }
+  end
 
   -- kb's data directory: its profiles and sockets, and trex's DevTools Pane files.
   function kb.data_dir()
@@ -94,14 +86,46 @@ function M.new(opts)
   -- Chrome on it reports that same endpoint.
   function kb.devtools_port(n)
     local profile = kb.data_dir() .. "/" .. (n == 1 and "profile" or ("profile-" .. n))
-    local text = read(profile .. "/DevToolsActivePort")
-    local port, endpoint = (text or ""):match("^(%d+)\r?\n([^\r\n]+)")
+    local port, endpoint = (util.read(profile .. "/DevToolsActivePort") or ""):match("^(%d+)\r?\n([^\r\n]+)")
     if port == nil then return nil end
-    local r = rex.exec({ "/usr/bin/curl", "-s", "-m", "1", "http://127.0.0.1:" .. port .. "/json/version" }, { timeout = 2 })
-    local ok, version = pcall(rex.json.decode, (r and r.stdout) or "")
-    local ws = ok and type(version) == "table" and version.webSocketDebuggerUrl
+    local version = util.get_json("http://127.0.0.1:" .. port .. "/json/version")
+    local ws = version and version.webSocketDebuggerUrl
     if type(ws) ~= "string" or ws:sub(-#endpoint) ~= endpoint then return nil end
     return port
+  end
+
+  -- The id of the page target kb `id` shows, among the pages on its DevTools
+  -- port `port` (`/json/list` also lists Chrome's own UI targets, and each
+  -- window a page opens is a page of its own). With one page, that one; else
+  -- the page whose url, and if need be title, are the ones kb shows. Returns
+  -- nil and a message for the user when no page or several match: trex never
+  -- guesses.
+  function kb.shown_target(id, port)
+    local pages = {}
+    for _, t in ipairs(util.get_json("http://127.0.0.1:" .. port .. "/json/list") or {}) do
+      if t.type == "page" then pages[#pages + 1] = t end
+    end
+    if #pages == 0 then
+      return nil, "trex: KittyBrowser " .. id .. " lists no page on its DevTools port " .. port .. "."
+    end
+    if #pages == 1 then return pages[1].id end
+
+    local shown = kb.status(id)
+    if shown == nil then return nil, "trex: KittyBrowser " .. id .. " isn't answering." end
+    local function matching(list, keep)
+      local out = {}
+      for _, t in ipairs(list) do if keep(t) then out[#out + 1] = t end end
+      return out
+    end
+    local same = matching(pages, function(t) return same_url(t.url, shown.url) end)
+    if #same > 1 then same = matching(same, function(t) return t.title == shown.title end) end
+    if #same == 1 then return same[1].id end
+    if #same == 0 then
+      return nil, ("trex: none of KittyBrowser %s's %d windows is on %s, the page it shows."
+        .. " Press F12 again once the page has loaded."):format(id, #pages, tostring(shown.url))
+    end
+    return nil, ("trex: KittyBrowser %s has %d windows on %s, so trex can't tell which one it shows."
+      .. " Close the others (kb ctl -i %s back closes a popup) and press F12 again."):format(id, #same, shown.url, id)
   end
 
   return kb

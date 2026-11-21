@@ -12,10 +12,12 @@
 -- This file uses only rex.bind, rex.session, rex.block.call and pcall, so the
 -- tests can load it as a client script, where io, rex.exec and dofile don't exist.
 --
--- Returns bind(on_kb_pane): binds F12 to call on_kb_pane(ctx) in kb panes.
+-- Loaded as loadfile("f12.lua")(util) → bind(on_kb_pane): binds F12 to call
+-- on_kb_pane(ctx) in kb panes.
+
+local util = ...
 
 local TERMINAL = "com.superlogical.terminal"
-local SHELL = "com.superlogical.terminal.shell"
 
 local NOTICE = [[
 printf '\n  %s\n\n  (any key closes this)' "$1"
@@ -27,22 +29,14 @@ local function foreground(block_id)
   return p and p.foreground and p.foreground.name
 end
 
--- The window that holds `block_id`, if any.
-local function window_of(block_id)
-  local listed = rex.session.list_blocks{}
-  for _, b in ipairs((listed and listed.blocks) or {}) do
-    if b.block_id == block_id then return b.window_id end
-  end
-  return nil
-end
-
 -- Shows `message` in a notice in front of the window that holds `block_id`.
 local function notice(block_id, message)
+  local b = util.find_block("block_id", block_id)
   rex.session.new_layer{
-    window_id = window_of(block_id),
+    window_id = b and b.window_id,
     bounds = { 0.1, 0.35, 0.8, 0.3 },
     focus = true,
-    layout = { block = { flavor = SHELL, label = "trex notice",
+    layout = { block = { flavor = util.SHELL, label = "trex notice",
       options = { shell = "none", command = { "/bin/bash", "-c", NOTICE, "trex", message } } } },
   }
 end

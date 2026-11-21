@@ -12,7 +12,7 @@
 # --dry-run  print what would be done; change nothing
 # --yes      replace a KittyBrowser at another commit without asking
 #
-# The pinned commit is read from lua/trex/kb.lua, the one place it lives.
+# The pinned commit is read from lua/trex/pin.lua, the one place it lives.
 # Test hook: TREX_APPLICATIONS (colon-separated dirs searched for Google Chrome.app).
 
 set -u
@@ -22,9 +22,9 @@ REX=${REX:-$(command -v rex || echo "$HOME/Library/Application Support/com.super
 APP_DIRS=${TREX_APPLICATIONS:-/Applications:$HOME/Applications}
 CARGO_HOME_DIR=${CARGO_HOME:-$HOME/.cargo}
 
-KB_REPO=$(sed -n 's/^M\.REPO = "\(.*\)"$/\1/p' "$here/lua/trex/kb.lua")
-KB_PIN=$(sed -n 's/^M\.PIN = "\(.*\)"$/\1/p' "$here/lua/trex/kb.lua")
-[ -n "$KB_REPO" ] && [ -n "$KB_PIN" ] || { echo "trex setup: can't read the pinned kb commit from lua/trex/kb.lua" >&2; exit 1; }
+KB_REPO=$(sed -n 's/^M\.REPO = "\(.*\)"$/\1/p' "$here/lua/trex/pin.lua")
+KB_PIN=$(sed -n 's/^M\.PIN = "\(.*\)"$/\1/p' "$here/lua/trex/pin.lua")
+[ -n "$KB_REPO" ] && [ -n "$KB_PIN" ] || { echo "trex setup: can't read the pinned kb commit from lua/trex/pin.lua" >&2; exit 1; }
 
 dry=0; yes=0; passthru=()
 while [ $# -gt 0 ]; do
