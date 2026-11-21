@@ -75,6 +75,21 @@ test_empty_input_opens_the_default_url() {
   opens_the_default "   "
 }
 
+# Without a url, the prompt opens with an empty field: localhost:3000 is only the
+# grey hint, and submitting the field as it is opens http://localhost:3000.
+# tests/load.lua answers the prompt itself (TREX_PROMPT), so no Rex app is asked.
+test_prompt_starts_empty_with_the_default_as_a_hint() {
+  local dir block; dir=$(mktemp -d)
+  TREX_PROMPT=$dir/prompt.json TREX_PROMPT_ANSWER="" trex_do trex_open
+  assert_status 0 "trex_open with the prompt answered empty"
+  block=$(printf '%s' "$DO_OUT" | jq -r '.block_id // empty')
+  [ -n "$block" ] && BLOCKS_SEEN+=("$block")
+  assert_eq "http://localhost:3000" "$(printf '%s' "$DO_OUT" | jq -r '.url // empty')" "url opened"
+  assert_eq "" "$(jq -r '.value // empty' "$dir/prompt.json" 2>/dev/null)" "the field's starting text"
+  assert_contains "$(jq -r '.placeholder // empty' "$dir/prompt.json" 2>/dev/null)" "localhost:3000" "the hint"
+  rm -rf "$dir"
+}
+
 # The pin check reads cargo's install record; these hand trex a made-up one.
 PIN=$(sed -n 's/^M\.PIN = "\(.*\)"$/\1/p' "$TREX_ROOT/lua/trex/pin.lua")
 

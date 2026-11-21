@@ -96,10 +96,11 @@ function M.setup(opts)
     run = function(ctx, args)
       local address = args.url
       if address == nil then
+        -- The field starts empty, with the default only as a hint; an empty
+        -- answer opens DEFAULT_URL.
         local answer = rex.ui.input{
           title = "Open in a Browser Pane",
-          placeholder = "URL or localhost port",
-          value = DEFAULT_URL,
+          placeholder = "URL or port, e.g. localhost:3000",
           confirm = "Open",
         }
         if answer == nil then return nil end -- cancelled, timed out, or no app to ask

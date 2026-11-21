@@ -53,7 +53,7 @@ changing trex's Lua.
 
 ## Use
 
-- **Trex: Open Browser…** (`cmd+shift+b`): asks for a URL (default `http://localhost:3000`) and opens a Browser Pane, `kb --devtools URL`, to the right
+- **Trex: Open Browser…** (`cmd+shift+b`): asks for a URL (the field starts empty; `localhost:3000` is the hint) and opens a Browser Pane, `kb --devtools URL`, to the right
   of the focused pane. An empty answer opens the default. A bare port such as `3000` or `:3000` opens `http://localhost:3000`. Input starting with `-`
   is refused, because kb would read it as a flag. If the installed kb isn't the pinned commit, it says so and doesn't open.
 - **F12** in a Browser Pane, or **Trex: Toggle DevTools** from the palette: opens a DevTools Pane beside it, with Chrome DevTools for that pane's
