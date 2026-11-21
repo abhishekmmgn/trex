@@ -52,3 +52,41 @@ Left for a human:
 - **Remembered side by hand:** move a DevTools Pane with Rex's own move/drag, close it with F12, open again. Closing it any other way (Rex's close
   pane, or with the Browser Pane) does not record the side, because trex only sees the layout when it does the closing.
 - The palette title changed from "Trex: Open DevTools" to "Trex: Toggle DevTools"; the app may need the block rewritten to refetch it.
+
+**2026-11-21, review round (branch `trex/review-fixes`):**
+
+- **F12 attaches to the window kb shows.** `kb.shown_target` (lua/trex/kb.lua): with one page target, that one; otherwise the page whose url
+  (ignoring a trailing `/`, since kb reports the given address until the page loads) and, if needed, title match `kb ctl -i ID status`. No match
+  or several (two windows on one page) is an error for the user ("can't tell which one it shows"); there is no fallback to the first page.
+  Tests: `test_devtools_attaches_to_the_window_kb_shows`, `test_devtools_refuses_to_guess_between_windows_on_one_page`.
+- **Follows new windows (the user's answer to the question above: yes).** The `rex wait` watcher is replaced by `lua/trex/devtools-watch.lua`,
+  a `rex do` script the DevTools Pane runs beside its kb. Every second it asks the Browser Pane's kb what it shows (`kb ctl -i ID status`);
+  when the url or the `windows:` line changes it finds the page target again and, if it is another one, `kb ctl open`s that inspector in the
+  DevTools Pane's KittyBrowser (same origin, so the screencast setting still holds). It follows back when the popup closes. It also closes the
+  DevTools Pane on `block_closed` / `terminal.child_exited` of the Browser Pane, and exits when the DevTools Pane closes.
+  Test: `test_devtools_follows_kb_to_a_window_the_page_opens` (window.open, then `kb ctl back`).
+- **Remembered side, however it closes.** Rex gives no hook at close time (the layout is already gone by then, and config Lua can't hear
+  `block_closed`), so the watcher records the side on every `session_view_changed`: on open and whenever the pane is moved. The last side seen
+  while the two panes sat side by side is what the next DevTools Pane uses, whether this one was closed by F12, by Rex's own close, or with
+  its Browser Pane. F12's own close still records it too. Tests: `test_devtools_closed_by_rex_…`, `test_devtools_closed_with_its_browser_pane_…`.
+  (Moving the DevTools Pane to another tab or window records nothing; the side before that stays.)
+- **Rex's floating notifications: no route for plugins.** Checked the Rex docs (`reference_mac-actions.md` "Notification Position",
+  `reference_mac-settings.md` In-App Notifications, `automate_lua-events.md`, `reference_lua.md`, `reference_api.md`, and the live
+  `build/program-status.md`) and the app itself (`rex client inspect` on the Mac app, its binary's strings):
+  - No Lua API posts a notification, and the Mac app's client actions include only `client.notice.dismiss`, nothing that shows one, so
+    `rex.client.queue` / `client.perform` can't either.
+  - OSC 9 / OSC 777 go to **native macOS notifications** (Settings > Notifications > System Notifications > "Terminal notifications"),
+    not the in-app ones.
+  - OSC 7501 (Program Status Protocol) drives tab indicators, the session picker, sounds and macOS notifications while Rex is in the
+    background; it would also have to be written by the program in the Browser Pane (kb), not by trex.
+  - The app's floating notices (`RexNotice`, `ActionFailureReporter`, "Pane Action Failed") are what it shows for its own failures. A key
+    function that raises makes the app's `client.key` call fail, which might land there, but whether the app shows `client.key` failures is
+    unverified (it needs a real key press in the app), and raising would lose the message if it doesn't. Worth one manual try: temporarily
+    make f12.lua re-raise instead of showing its notice, press F12 on a kb started without `--devtools`, and see if Rex shows a notice.
+  So the floating `trex notice` pane stays, as the fallback, changed so it doesn't steal focus: it sits at the top of the window
+  (`0.15, 0.04, 0.7, 0.16`), opens unfocused, and closes itself after 8 s (or on a key once clicked). Tests: the notice shows the message,
+  focus stays where it was, a key closes it, and it closes by itself.
+- `tests/run.sh`: 47/47.
+
+Left for a human: following a real popup in the app (a site that opens a window), the side after dragging the pane with the mouse and
+closing it with Rex's close, and how the new notice looks.
