@@ -5,15 +5,15 @@
 #   bin/trex setup [--dry-run] [--yes] [--config PATH] [--repo DIR]
 #
 # Checks, in order: Rex (reported, never installed), cargo, Google Chrome, the
-# pinned KittyBrowser (ADR-0001), then the trex block in the Rex config
+# pinned KittyBrowser (ADR-0001, ADR-0002), then the trex block in the Rex config
 # (`bin/trex install`). Each line says "ok" (already there), "installed",
 # "would" (--dry-run), "skipped" or "FAILED". Exits 1 if anything failed,
-# including a kb at another commit left in place.
+# including a kb at another commit or from another repo left in place.
 #
 # --dry-run  print what would be done; change nothing
-# --yes      replace a KittyBrowser at another commit without asking
+# --yes      replace a KittyBrowser at another commit or from another repo without asking
 #
-# The pinned commit is read from lua/trex/pin.lua, the one place it lives.
+# The pinned repo and commit are read from lua/trex/pin.lua, the one place they live.
 # Test hook: TREX_APPLICATIONS (colon-separated dirs searched for Google Chrome.app).
 
 set -u
@@ -110,35 +110,45 @@ else
 fi
 
 # --- KittyBrowser ---------------------------------------------------------------
+# The pin is a commit on one repo (ADR-0002: the user's fork for now), so the
+# install record must name both. `cargo install --git REPO --rev PIN` records
+# "git+REPO?rev=PIN#PIN" ("git+REPO#PIN" without --rev).
 crates2="$CARGO_HOME_DIR/.crates2.json"
 kb_bin="$CARGO_HOME_DIR/bin/kb"
 kb_key=$(grep -o '"kittybrowser [^"]*"' "$crates2" 2>/dev/null | head -n1 | tr -d '"')
+source=${kb_key#*(}; source=${source%)}
+kb_install=(install --git "$KB_REPO" --rev "$KB_PIN" --locked --force)
+is_pin() { # SOURCE: whether it is $KB_PIN built from $KB_REPO
+  local url=${1#git+}
+  [[ "$1" == git+* ]] && [ "${1##*#}" = "$KB_PIN" ] || return 1
+  url=${url%%[?#]*}; url=${url%/}; url=${url%.git}
+  [ "$url" = "$KB_REPO" ]
+}
 install_kb() {
   if [ -z "$cargo" ]; then say "kb: skipped" "no cargo to build it with"; return; fi
-  if run "$cargo" install --git "$KB_REPO" --rev "$KB_PIN" --force; then
-    say "kb: installed" "pinned commit ${KB_PIN:0:8}"
+  if run "$cargo" "${kb_install[@]}"; then
+    say "kb: installed" "pinned commit ${KB_PIN:0:8} from $KB_REPO"
   else fail kb "cargo install failed"; fi
 }
-if [[ "$kb_key" == *"#$KB_PIN)" ]] && [ -x "$kb_bin" ]; then
-  ok kb "pinned commit ${KB_PIN:0:8} at $kb_bin"
-elif [ -z "$kb_key" ] || [[ "$kb_key" == *"#$KB_PIN)" ]]; then
+if [ -n "$kb_key" ] && is_pin "$source" && [ -x "$kb_bin" ]; then
+  ok kb "pinned commit ${KB_PIN:0:8} from $KB_REPO at $kb_bin"
+elif [ -z "$kb_key" ] || is_pin "$source"; then
   # Not installed, or the record says the pin but $kb_bin is gone: nothing to replace.
-  if [ "$dry" = 1 ]; then would kb "cargo install --git $KB_REPO --rev $KB_PIN --force"; else install_kb; fi
+  if [ "$dry" = 1 ]; then would kb "cargo ${kb_install[*]}"; else install_kb; fi
 else
-  source=${kb_key#*(}; source=${source%)}
   if [ "$dry" = 1 ]; then
-    would kb "replace the installed KittyBrowser ($source) with the pinned commit ${KB_PIN:0:8} (asks first unless --yes)"
+    would kb "replace the installed KittyBrowser ($source) with the pinned commit ${KB_PIN:0:8} from $KB_REPO (asks first unless --yes)"
   else
     answer=n
     if [ "$yes" = 1 ]; then answer=y
     else
-      printf 'kb: the installed KittyBrowser is %s, not the pinned commit %s. Replace it? [y/N] ' "$source" "$KB_PIN"
+      printf 'kb: the installed KittyBrowser is %s, not the pinned commit %s from %s. Replace it? [y/N] ' "$source" "$KB_PIN" "$KB_REPO"
       read -r answer || [ -n "$answer" ] || answer=n
       echo
     fi
     case "$answer" in
       y|Y|yes) install_kb ;;
-      *) fail kb "left $source in place. trex won't work until it is the pinned commit: rerun setup and answer y, or use --yes" ;;
+      *) fail kb "left $source in place. trex won't work until it is the pinned commit from $KB_REPO: rerun setup and answer y, or use --yes" ;;
     esac
   fi
 fi

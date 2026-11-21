@@ -1,4 +1,4 @@
--- trex for Rex: a Chromium browser (stock KittyBrowser, `kb`) in Rex panes.
+-- trex for Rex: a Chromium browser (KittyBrowser, `kb`, at the commit pin.lua names) in Rex panes.
 --
 -- `bin/trex install` loads this from Rex's config (~/.config/rex/init.lua):
 --

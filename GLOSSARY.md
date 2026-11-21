@@ -21,5 +21,5 @@ Picking an element in a Browser Pane and sending a description of it (DOM path, 
 _Avoid_: grab, select tool, inspect (inspect means the DevTools inspector)
 
 **Base Browser**:
-The existing open-source terminal browser that trex runs as shipped and drives from outside, rather than forking it.
+The existing open-source terminal browser that trex runs as shipped and drives from outside, rather than forking it. For now trex pins a commit on the user's fork that adds fixes not yet upstream (ADR-0002).
 _Avoid_: upstream, engine, fork

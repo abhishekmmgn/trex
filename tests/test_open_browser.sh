@@ -92,6 +92,8 @@ test_prompt_starts_empty_with_the_default_as_a_hint() {
 
 # The pin check reads cargo's install record; these hand trex a made-up one.
 PIN=$(pinned_kb PIN)
+REPO=$(pinned_kb REPO)
+INSTALL="cargo install --git $REPO --rev $PIN --locked --force"
 
 fake_crates2() { # INSTALL_KEY...  → path of a crates2.json listing those installs
   local file; file=$(mktemp)
@@ -105,7 +107,26 @@ test_reports_a_kb_that_is_not_the_pinned_commit() {
   TREX_CRATES2=$crates2 refuses "$PAGE_URL" "isn't the pinned"
   assert_contains "$DO_ERR" "$PIN" "names the pinned commit"
   assert_contains "$DO_ERR" "$other" "names what is installed"
-  assert_contains "$DO_ERR" "cargo install --git https://github.com/graiz/kittybrowser --rev $PIN" "says how to fix it"
+  assert_contains "$DO_ERR" "$INSTALL" "says how to fix it"
+  rm -f "$crates2"
+}
+
+# ADR-0002: the pin is a commit on the fork, so the same commit built from any other
+# repository isn't it.
+test_reports_the_pinned_commit_from_another_repo() {
+  local crates2
+  crates2=$(fake_crates2 "kittybrowser 0.1.0 (git+https://github.com/graiz/kittybrowser?rev=$PIN#$PIN)")
+  TREX_CRATES2=$crates2 refuses "$PAGE_URL" "isn't the pinned"
+  assert_contains "$DO_ERR" "$REPO" "names the pinned repo"
+  assert_contains "$DO_ERR" "git+https://github.com/graiz/kittybrowser" "names what is installed"
+  rm -f "$crates2"
+}
+
+# What `cargo install --git REPO --rev PIN` records: the pinned build, so it opens.
+test_opens_with_the_pinned_build_installed() {
+  local crates2
+  crates2=$(fake_crates2 "kittybrowser 0.1.0 (git+$REPO?rev=$PIN#$PIN)")
+  TREX_CRATES2=$crates2 open_and_check "$PAGE_URL" "$PAGE_URL"
   rm -f "$crates2"
 }
 
@@ -121,6 +142,6 @@ test_reports_a_missing_kb() {
   local crates2
   crates2=$(fake_crates2 "ripgrep 14.1.0 (registry+https://github.com/rust-lang/crates.io-index)")
   TREX_CRATES2=$crates2 refuses "$PAGE_URL" "isn't installed"
-  assert_contains "$DO_ERR" "--rev $PIN" "says how to install it"
+  assert_contains "$DO_ERR" "$INSTALL" "says how to install it"
   rm -f "$crates2"
 }

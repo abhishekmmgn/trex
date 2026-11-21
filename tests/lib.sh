@@ -29,6 +29,18 @@ set -u
 . "$TREX_ROOT/bin/trex-lib.sh"
 KB=${KB:-$HOME/.cargo/bin/kb}
 TREX_LOAD="$TREX_ROOT/tests/load.lua"
+# trex opens its Browser Panes with $KB too (tests/load.lua). The installed kb must
+# be the pinned commit. A KB built from the pinned commit elsewhere (cargo build
+# --release in a checkout of it) has no cargo install record, so the pin check
+# gets a stand-in record saying the pin is installed. Tests that hand it their
+# own TREX_CRATES2 still get theirs.
+export TREX_KB=$KB
+if [ "$KB" != "$HOME/.cargo/bin/kb" ] && [ -z "${TREX_CRATES2:-}" ]; then
+  TREX_STAND_IN_CRATES2=$(mktemp)
+  printf '{"installs":{"kittybrowser 0.1.0 (git+%s?rev=%s#%s)":{"bins":["kb"]}}}\n' \
+    "$(pinned_kb REPO)" "$(pinned_kb PIN)" "$(pinned_kb PIN)" >"$TREX_STAND_IN_CRATES2"
+  export TREX_CRATES2=$TREX_STAND_IN_CRATES2
+fi
 
 TESTS_RUN=0
 TESTS_FAILED=0
@@ -200,4 +212,5 @@ cleanup() {
   local s
   for s in ${SESSIONS_CREATED[@]+"${SESSIONS_CREATED[@]}"}; do "$REX" kill "$s" >/dev/null 2>&1; done
   stop_page_server
+  [ -n "${TREX_STAND_IN_CRATES2:-}" ] && rm -f "$TREX_STAND_IN_CRATES2"
 }

@@ -3,6 +3,7 @@
 -- config. Test-only settings come from the environment, because `rex do`
 -- types KEY=VALUE pairs against the action's own arguments:
 --
+--   TREX_KB       the kb binary trex runs (tests/lib.sh sets it to $KB)
 --   TREX_CRATES2  the cargo install record to check the pinned kb against
 --   TREX_STATE    trex's state file (tests/lib.sh gives each test its own)
 --   TREX_PROMPT   a file: when set, rex.ui.input never reaches a Rex app. It
@@ -13,6 +14,8 @@ local this_file = debug.getinfo(1, "S").source:gsub("^@", "")
 local root = this_file:match("^(.*)/tests/[^/]*$")
 
 local opts = {}
+local kb = os.getenv("TREX_KB")
+if kb ~= nil and kb ~= "" then opts.kb = kb end
 local crates2 = os.getenv("TREX_CRATES2")
 if crates2 ~= nil and crates2 ~= "" then opts.crates2 = crates2 end
 local state = os.getenv("TREX_STATE")

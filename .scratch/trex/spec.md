@@ -10,9 +10,9 @@ See `GLOSSARY.md` for the terms (Browser Pane, DevTools Pane, Agent Pane, Elemen
 
 ## Shape
 
-- **Base Browser:** stock KittyBrowser (`kb`), from `graiz/kittybrowser`, pinned at `d252d5fe771f4d8f18fbf184d8239524b3ecda39` and installed with `cargo install --git … --rev`. It runs the installed Google Chrome with kb's own profile.
+- **Base Browser:** KittyBrowser (`kb`), pinned for now to `1cc86f1863de596f771d509b15ee446cc3450b27` (branch `trex-pin`) on the fork `abhishekmmgn/trex-browser`: upstream `main` plus tickets 05, 09 and 08, which aren't upstream yet (ADR-0002, a temporary exception to ADR-0001). Installed with `cargo install --git <fork> --rev <pin> --locked --force`; repo and commit live in `lua/trex/pin.lua`. Back to stock `graiz/kittybrowser` once upstream merges them. It runs the installed Google Chrome with kb's own profile.
 - **trex:** a Rex plugin in this repo. Like leaf, a marked block in `~/.config/rex/init.lua` `dofile()`s trex's Lua from this repo. It adds Rex actions and key bindings, plus helper scripts if Lua alone isn't enough.
-- **Upstream changes:** anything that needs kb's code goes to `graiz/kittybrowser` as a pull request from `abhishekmmgn/trex-browser`. We fork only if blocked (see ADR-0001).
+- **Upstream changes:** anything that needs kb's code goes to `graiz/kittybrowser` as a pull request from `abhishekmmgn/trex-browser`. We fork only if blocked (see ADR-0001). Until those pull requests are opened and merged, trex pins the fork (ADR-0002).
 - **Removed (2026-11-21):** `terminal-browser` is gone entirely: its Rex actions, its `com.superlogical.rex.browser-action` and `dev.zenbu.terminal-browser` preferences, its launcher, the app, and its profile. The app and profile went to the macOS Trash.
 - **Tickets:** `.scratch/trex/issues/01`–`07`. 01 (Open Browser Pane) and 05 (upstream scroll PR) have no blockers.
 

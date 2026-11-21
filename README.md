@@ -1,6 +1,7 @@
 # trex
 
-A Chromium browser in Rex panes, for frontend work beside a coding agent. It runs stock KittyBrowser (`kb`) and adds Rex actions and keys around it.
+A Chromium browser in Rex panes, for frontend work beside a coding agent. It runs KittyBrowser (`kb`) and adds Rex actions and keys around it. Until upstream merges
+trex's kb fixes, the pinned kb is a commit on the fork `abhishekmmgn/trex-browser`, not stock `graiz/kittybrowser` (ADR-0002, an exception to ADR-0001).
 See `.scratch/trex/spec.md`, `GLOSSARY.md` and `docs/adr/`.
 
 ## Layout
@@ -8,7 +9,7 @@ See `.scratch/trex/spec.md`, `GLOSSARY.md` and `docs/adr/`.
 - `lua/trex/init.lua`: the plugin. `setup(opts)` defines the Rex actions and key bindings. Its sibling modules load from the same directory, each
   as `loadfile(path)(the modules it needs)`.
   - `util.lua`: small shared helpers (reading files, a DevTools endpoint's JSON, finding a block, the terminal flavor).
-  - `pin.lua`: the pinned KittyBrowser commit (the one place it lives) and the check that it is the one installed.
+  - `pin.lua`: the pinned KittyBrowser repo and commit (the one place they live) and the check that it is the one installed.
   - `kb.lua`: running KittyBrowsers: `kb list`, what a kb shows (`kb ctl status`), its DevTools port, and the page target it shows.
   - `url.lua`: turns what the user typed into the address kb gets.
   - `devtools.lua`: opens or closes a Browser Pane's DevTools Pane (block → kb → DevTools port → page target → inspector URL), on the remembered side.
@@ -30,20 +31,22 @@ One command does everything (Rex must already be installed; trex only reports it
 ```sh
 bin/trex setup              # cargo, Google Chrome, the pinned KittyBrowser, then the trex block
 bin/trex setup --dry-run    # print what it would do, change nothing
-bin/trex setup --yes        # also replace a kb at another commit (or a local build) without asking
+bin/trex setup --yes        # also replace a kb at another commit, from another repo (or a local build) without asking
 ```
 
 Each requirement prints `ok` (already there), `installed`, `skipped` or `FAILED` with the reason. What is present is left alone, so rerunning changes nothing.
 cargo comes from an existing `cargo` (also `~/.cargo/bin/cargo`), else Homebrew's `rustup` if `brew` exists (it is keg-only, so setup runs
 `$(brew --prefix rustup)/bin/rustup-init` and then uses `~/.cargo/bin/cargo`), else the official rustup installer.
 Chrome is detected in `/Applications` or `~/Applications`, else installed with `brew install --cask google-chrome`, else from Google's official dmg (no Homebrew needed).
-A kb at another commit is only replaced after you confirm; if you don't, setup fails, because trex won't open until it is the pinned commit.
+A kb at another commit or from another repo (such as upstream `graiz/kittybrowser`) is only replaced after you confirm; if you don't, setup fails,
+because trex won't open until it is the pinned commit from the pinned repo.
 The pin lives in `lua/trex/pin.lua`; the logic is in `bin/trex-setup`.
 
-Or by hand. The pinned KittyBrowser comes first (the commit is `M.PIN` in `lua/trex/pin.lua`):
+Or by hand. The pinned KittyBrowser comes first (the repo is `M.REPO` and the commit `M.PIN` in `lua/trex/pin.lua`):
 
 ```sh
-cargo install --git https://github.com/graiz/kittybrowser --rev "$(sed -n 's/^M\.PIN = "\(.*\)"$/\1/p' lua/trex/pin.lua)" --force
+pin() { sed -n "s/^M\.$1 = \"\(.*\)\"\$/\1/p" lua/trex/pin.lua; }
+cargo install --git "$(pin REPO)" --rev "$(pin PIN)" --locked --force
 ```
 
 Then add trex to Rex's config:
@@ -121,6 +124,9 @@ TREX_TEST_FILTER=bare_port tests/run.sh       # test functions whose name contai
 ```
 
 Needs `rex`, `kb` (`~/.cargo/bin/kb`, or set `KB`), `jq`, `/usr/bin/python3` and `/usr/bin/curl`. No network.
+trex's Browser Panes run `$KB` too. The installed kb must be the pinned commit. Before installing it, test against a build of the pinned commit
+(`cargo build --release` in a checkout of it): `KB=/path/to/checkout/target/release/kb tests/run.sh`. cargo has no install record for such a
+build, so the runner hands the pin check a stand-in record saying the pin is installed (tests that pass their own `TREX_CRATES2` keep theirs).
 
 What the runner does:
 - It serves `tests/site/` on a free local port (`$PAGE_URL`, `$PAGE_PORT`).

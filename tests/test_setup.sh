@@ -4,6 +4,10 @@
 # setup looks for. Chrome and kb are never launched.
 
 SETUP_PIN=$(pinned_kb PIN)
+SETUP_REPO=$(pinned_kb REPO)
+# What `cargo install --git REPO --rev PIN` writes into cargo's install record.
+SETUP_SOURCE="git+$SETUP_REPO?rev=$SETUP_PIN#$SETUP_PIN"
+SETUP_INSTALL="cargo install --git $SETUP_REPO --rev $SETUP_PIN --locked --force"
 
 stub() { # NAME BODY: a command on the fake PATH that logs "NAME args" first
   printf '#!/bin/bash\necho "%s $*" >>"$LOG"\n%s\n' "$1" "$2" >"$T/bin/$1"
@@ -20,7 +24,7 @@ fake_chrome() { mkdir -p "$T/apps/Google Chrome.app"; }
 
 # A cargo that records `install` and leaves the pinned kb record behind.
 CARGO_BODY='case "$1" in install) mkdir -p "$HOME/.cargo/bin"
-printf "{\"installs\":{\"kittybrowser 0.1.0 (git+https://github.com/graiz/kittybrowser#%s)\":{}}}" "'"$SETUP_PIN"'" >"$HOME/.cargo/.crates2.json"
+printf "{\"installs\":{\"kittybrowser 0.1.0 (%s)\":{}}}" "'"$SETUP_SOURCE"'" >"$HOME/.cargo/.crates2.json"
 : >"$HOME/.cargo/bin/kb";; esac'
 
 fake_cargo() { stub cargo "$CARGO_BODY"; }
@@ -64,7 +68,7 @@ run_setup() {
 done_world() { rm -rf "$T"; ANSWER=; }
 
 test_setup_with_everything_present_changes_nothing() {
-  new_world; fake_chrome; fake_cargo; crates2 "git+https://github.com/graiz/kittybrowser#$SETUP_PIN"
+  new_world; fake_chrome; fake_cargo; crates2 "$SETUP_SOURCE"
   run_setup; assert_status_code 0 "first run"
   assert_contains "$OUT" "cargo: ok" "cargo reported present"
   assert_contains "$OUT" "chrome: ok" "chrome reported present"
@@ -89,7 +93,7 @@ test_setup_without_brew_uses_rustup_installer_and_the_dmg() {
   assert_contains "$log" "dl.google.com/chrome/mac/universal/stable/GGRO/googlechrome.dmg" "Google's dmg"
   assert_contains "$log" "hdiutil attach" "dmg mounted"
   [ -d "$T/apps/Google Chrome.app" ] || fail "Chrome.app was copied into the applications dir"
-  assert_contains "$log" "cargo install --git https://github.com/graiz/kittybrowser --rev $SETUP_PIN --force" "pinned kb install"
+  assert_contains "$log" "$SETUP_INSTALL" "pinned kb install"
   done_world
 }
 
@@ -131,15 +135,37 @@ test_setup_kb_at_wrong_commit_is_kept_unless_confirmed() {
   done_world
 }
 
+# ADR-0002: the pin is a commit on the fork. An upstream install (the earlier pin,
+# or even the same commit built from upstream) is another kb, replaced only when
+# confirmed, by the fork's build.
+test_setup_replaces_an_upstream_kb_with_the_forks_pin() {
+  local upstream
+  for upstream in "git+https://github.com/graiz/kittybrowser#d252d5fe771f4d8f18fbf184d8239524b3ecda39" \
+    "git+https://github.com/graiz/kittybrowser?rev=$SETUP_PIN#$SETUP_PIN"; do
+    new_world; fake_chrome; fake_cargo; crates2 "$upstream"
+    ANSWER=n; run_setup; assert_status_code 1 "declined for $upstream"
+    assert_contains "$OUT" "kb: FAILED" "$upstream left alone"
+    assert_contains "$OUT" "$upstream" "names what is installed"
+    assert_contains "$OUT" "$SETUP_REPO" "names the pinned repo"
+    case "$(cat "$LOG")" in *"cargo install"*) fail "installed over $upstream without confirmation" ;; esac
+    ANSWER=y; run_setup; assert_status_code 0 "confirmed for $upstream"
+    assert_contains "$OUT" "kb: installed" "$upstream replaced after y"
+    assert_contains "$(cat "$LOG")" "$SETUP_INSTALL" "the fork's pin installed over $upstream"
+    run_setup; assert_status_code 0 "run after replacing $upstream"
+    assert_contains "$OUT" "kb: ok" "the fork's pin is then ok"
+    done_world
+  done
+}
+
 # The record says the pin is installed but ~/.cargo/bin/kb is gone: put it back
 # without asking, since nothing else would be replaced.
 test_setup_reinstalls_a_missing_pinned_kb() {
-  new_world; fake_chrome; fake_cargo; crates2 "git+https://github.com/graiz/kittybrowser#$SETUP_PIN"
+  new_world; fake_chrome; fake_cargo; crates2 "$SETUP_SOURCE"
   rm "$T/home/.cargo/bin/kb"
   run_setup; assert_status_code 0 "run"
   assert_contains "$OUT" "kb: installed" "reinstalled"
   case "$OUT" in *eplace*) fail "talks of replacing another commit: $OUT" ;; esac
-  assert_contains "$(cat "$LOG")" "cargo install --git https://github.com/graiz/kittybrowser --rev $SETUP_PIN" "the pin"
+  assert_contains "$(cat "$LOG")" "$SETUP_INSTALL" "the pin"
   done_world
 }
 
@@ -165,7 +191,7 @@ test_setup_dry_run_changes_nothing() {
 }
 
 test_setup_reports_missing_rex_without_installing_it() {
-  new_world; fake_chrome; fake_cargo; crates2 "git+https://github.com/graiz/kittybrowser#$SETUP_PIN"
+  new_world; fake_chrome; fake_cargo; crates2 "$SETUP_SOURCE"
   rm "$T/bin/rex"
   run_setup; assert_status_code 1 "fails when rex is missing"
   assert_contains "$OUT" "rex: FAILED" "rex reported"
