@@ -64,11 +64,25 @@ function M.side_of(browser, devtools)
 end
 
 -- Saves which side of `browser` the DevTools Pane `devtools` is on in `state`,
--- if they are side by side; returns that side.
-function M.remember_side(state, browser, devtools)
+-- if they are side by side; returns that side. It is saved with `configured`, the
+-- devtools.side setting at the time, so a later change of the setting can be seen.
+function M.remember_side(state, browser, devtools, configured)
   local side = browser and M.side_of(browser, devtools)
-  if side ~= nil then state.set("devtools_side", side) end
+  if side ~= nil then state.set("devtools_side", { side = side, configured = configured }) end
   return side
+end
+
+-- The side the user last moved DevTools to, if it was remembered while devtools.side
+-- was still `configured`. A changed setting wins: the memory is dropped, and so is
+-- one in an older format (a bare string) or with a side that doesn't exist.
+function M.remembered_side(state, configured)
+  local saved = state.get("devtools_side")
+  if saved == nil then return nil end
+  if type(saved) == "table" and saved.configured == configured and SIDES[saved.side] ~= nil then
+    return saved.side
+  end
+  state.set("devtools_side", nil)
+  return nil
 end
 
 local function close_block(session_id, block_id)
@@ -78,7 +92,8 @@ end
 
 -- opts: kb (kb.lua's kb), script (path of devtools-pane.sh), rex (path of the
 -- rex CLI, which the DevTools Pane runs its watcher with), state (state.lua,
--- where the side the user last had DevTools on is kept), state_path (its file).
+-- where the side the user last had DevTools on is kept), state_path (its file),
+-- config (config.lua's config: get("devtools.side") is where DevTools opens).
 function M.new(opts)
   local kb = opts.kb
   local devtools = {}
@@ -86,14 +101,15 @@ function M.new(opts)
   -- Closes the DevTools Pane `block` of the Browser Pane `browser` (if known),
   -- first remembering which side of it the user had it on.
   local function close(ctx, block, browser)
-    local side = M.remember_side(opts.state, browser, block)
+    local side = M.remember_side(opts.state, browser, block, opts.config.get("devtools.side"))
     close_block(ctx.session_id, block)
     return { closed = true, block_id = block, browser = browser, side = side }
   end
 
   -- F12: opens a DevTools Pane for the Browser Pane `ctx.block_id`, or closes
   -- the one it has. In a DevTools Pane, closes that pane. It opens on the side
-  -- of the Browser Pane the last one was on (below at first).
+  -- of the Browser Pane the last one was moved to, unless devtools.side has changed
+  -- since; else on devtools.side (below by default).
   --
   -- Returns { closed = true, block_id = the DevTools Pane closed, browser, side }
   -- when it closed one; else { block_id, browser, kb, port, target, inspector,
@@ -132,9 +148,9 @@ function M.new(opts)
     local profile = dir .. "/" .. browser.id
     local inspector = kb_module.inspector_url(port, target)
 
-    local side = opts.state.get("devtools_side")
-    if SIDES[side] == nil then side = "below" end
-    local watch = rex.json.encode{ browser = pane, kb = kb.bin, kb_id = browser.id, port = port,
+    local configured = opts.config.get("devtools.side")
+    local side = M.remembered_side(opts.state, configured) or configured
+    local watch = rex.json.encode{ browser = pane, configured = configured, kb = kb.bin, kb_id = browser.id, port = port,
       target = target, socket = socket, state = opts.state_path }
     local r, err = rex.session.new_split{
       anchor_id = pane,

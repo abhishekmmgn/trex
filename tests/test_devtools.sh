@@ -212,6 +212,90 @@ test_devtools_closed_with_its_browser_pane_reopens_on_the_side_it_was_moved_to()
   remembers_side horizontal after right with-browser
 }
 
+# devtools.side (ticket settings-05) is where DevTools opens when nothing is
+# remembered. Each trex_do loads trex afresh, so it reads the config file as written.
+set_devtools_side() { # SIDE
+  mkdir -p "$(dirname "$TREX_CONFIG")"
+  printf '{ "devtools": { "side": "%s" } }\n' "$1" >"$TREX_CONFIG"
+}
+
+# Closes the DevTools Pane with F12's action and waits for it to go.
+close_devtools() {
+  trex_do trex_devtools -b "$BROWSER"
+  assert_eq "true" "$(printf '%s' "$DO_OUT" | jq -r '.closed // empty')" "closed it"
+  devtools_gone "$DEVTOOLS" "$DEVTOOLS_SOCKET" || fail "the DevTools Pane is still there"
+}
+
+# Toggles DevTools open for $BROWSER and sets $DEVTOOLS and $DEVTOOLS_SOCKET.
+reopen_devtools() {
+  trex_do trex_devtools -b "$BROWSER"
+  assert_status 0 "open DevTools"
+  DEVTOOLS=$(printf '%s' "$DO_OUT" | jq -r '.block_id // empty')
+  DEVTOOLS_SOCKET=$(printf '%s' "$DO_OUT" | jq -r '.socket // empty')
+  DEVTOOLS_SOCKETS+=("$DEVTOOLS_SOCKET")
+  BLOCKS_SEEN+=("$DEVTOOLS")
+}
+
+devtools_opens_on_configured_side() { # SIDE
+  set_devtools_side "$1"
+  open_browser "$PAGE_URL" || return
+  reopen_devtools
+  assert_eq "$1" "$(side_of "$BROWSER" "$DEVTOOLS")" "DevTools Pane with devtools.side=$1"
+}
+
+test_devtools_opens_below_by_default() {
+  rm -f "$TREX_CONFIG"
+  open_browser "$PAGE_URL" || return
+  reopen_devtools
+  assert_eq "below" "$(side_of "$BROWSER" "$DEVTOOLS")" "DevTools Pane with no config"
+}
+
+test_devtools_opens_on_the_configured_side_below() { devtools_opens_on_configured_side below; }
+test_devtools_opens_on_the_configured_side_above() { devtools_opens_on_configured_side above; }
+test_devtools_opens_on_the_configured_side_right() { devtools_opens_on_configured_side right; }
+test_devtools_opens_on_the_configured_side_left() { devtools_opens_on_configured_side left; }
+
+test_devtools_moved_side_is_remembered_under_a_configured_side() {
+  set_devtools_side left
+  open_browser "$PAGE_URL" || return
+  reopen_devtools
+  assert_eq "left" "$(side_of "$BROWSER" "$DEVTOOLS")" "first DevTools Pane"
+  move_block "$DEVTOOLS" "$BROWSER" vertical after
+  assert_eq "below" "$(side_of "$BROWSER" "$DEVTOOLS")" "DevTools Pane moved"
+  sleep 1
+  close_devtools
+  reopen_devtools
+  assert_eq "below" "$(side_of "$BROWSER" "$DEVTOOLS")" "reopened on the moved-to side"
+}
+
+test_devtools_a_changed_config_side_wins_over_the_remembered_side() {
+  set_devtools_side left
+  open_browser "$PAGE_URL" || return
+  reopen_devtools
+  move_block "$DEVTOOLS" "$BROWSER" horizontal after
+  assert_eq "right" "$(side_of "$BROWSER" "$DEVTOOLS")" "DevTools Pane moved"
+  sleep 1
+  close_devtools
+  set_devtools_side above
+  reopen_devtools
+  assert_eq "above" "$(side_of "$BROWSER" "$DEVTOOLS")" "configured side after the change"
+  assert_eq "" "$(jq -r '.devtools_side // empty' "$TREX_STATE")" "the old memory is dropped"
+  # Moving it again is remembered under the new value.
+  move_block "$DEVTOOLS" "$BROWSER" horizontal before
+  sleep 1
+  close_devtools
+  reopen_devtools
+  assert_eq "left" "$(side_of "$BROWSER" "$DEVTOOLS")" "remembered again under the new value"
+}
+
+test_devtools_a_remembered_side_in_the_old_format_gives_way_to_the_config() {
+  printf '{"devtools_side":"right"}' >"$TREX_STATE"
+  set_devtools_side above
+  open_browser "$PAGE_URL" || return
+  reopen_devtools
+  assert_eq "above" "$(side_of "$BROWSER" "$DEVTOOLS")" "configured side"
+}
+
 test_devtools_says_so_when_kb_was_started_without_devtools() {
   local block before
   block=$("$REX" split -s "$SESSION" -b "$ANCHOR" --split=right --focus=false --shell=none --json -- "$KB" "$PAGE_URL" |

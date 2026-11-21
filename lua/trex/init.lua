@@ -70,6 +70,7 @@ function M.setup(opts)
     rex = opts.rex or find_rex(home),
     state = load("state", util, state_path),
     state_path = state_path,
+    config = config,
   }
 
   -- Where a Browser Pane goes, by the open_in setting: "window" is a new Rex window (tab) in the
