@@ -217,6 +217,124 @@ test_pick_right_after_a_pick_gets_its_click() {
   pick_teardown
 }
 
+# --- handing off to the Agent Pane (Element Handoff ticket 02) ------------------
+
+# Starts a stand-in agent (tests/stub_agent.sh, reported as claude) in a new
+# pane: split below BLOCK, or in a new window with -w. Sets $AGENT and $AGENT_LOG.
+start_agent() { # BLOCK | -w
+  AGENT_LOG=$(mktemp "$CLIP_DIR/agent.XXXX")
+  local json
+  if [ "$1" = -w ]; then
+    json=$("$REX" window new -s "$SESSION" Agent --focus=false --keep-open --json -- \
+      /bin/bash -c 'exec -a claude /bin/bash "$0" "$1"' "$TREX_ROOT/tests/stub_agent.sh" "$AGENT_LOG")
+  else
+    json=$("$REX" run -s "$SESSION" -b "$1" --split=below --focus=false --keep-open --json -- \
+      /bin/bash -c 'exec -a claude /bin/bash "$0" "$1"' "$TREX_ROOT/tests/stub_agent.sh" "$AGENT_LOG")
+  fi
+  AGENT=$(printf '%s' "$json" | jq -r '.block_id // .block_ids[0] // .initial_block_ids[0] // empty')
+  [ -n "$AGENT" ] || { fail "couldn't start the stand-in agent: $json"; return 1; }
+  BLOCKS_SEEN+=("$AGENT")
+  local i
+  for i in $(seq 1 40); do
+    "$REX" capture -s "$SESSION" -b "$AGENT" 2>/dev/null | grep -q 'stub agent ready' && return 0
+    sleep 0.25
+  done
+  fail "the stand-in agent never started"
+}
+
+# Waits up to 10 s for LOG to hold a whole paste (its closing marker).
+wait_for_paste() { # LOG
+  local i
+  for i in $(seq 1 40); do
+    grep -q $'\e\\[201~' "$1" 2>/dev/null && return 0
+    sleep 0.25
+  done
+  return 1
+}
+
+note_says() { # TEXT: waits for a note on the page containing TEXT
+  wait_for_page "[...document.querySelectorAll(\"div\")].some(d => d.textContent.includes(\"$1\"))" true ||
+    fail "no note on the page says [$1]"
+}
+
+test_pick_pastes_into_the_agent_pane_unsent_and_focuses_it() {
+  pick_setup || { pick_teardown; return; }
+  start_agent "$ANCHOR" || { pick_teardown; return; }
+  start_pick
+  assert_eq "$AGENT" "$(printf '%s' "$DO_OUT" | jq -r '.agent // empty')" "the Agent Pane found ($DO_OUT)"
+  assert_eq "Claude Code" "$(printf '%s' "$DO_OUT" | jq -r '.agent_name // empty')" "what runs there"
+  "$KB" ctl -i "$BROWSER_ID" click '#save' >/dev/null
+  wait_for_paste "$AGENT_LOG" || { fail "nothing was pasted into the agent (log: $(cat -v "$AGENT_LOG"))"; pick_teardown; return; }
+  wait_for_clip || fail "nothing was copied"
+  # Exactly one bracketed paste of the description and a newline; no Enter after it.
+  assert_eq "$(printf '\e[200~%s\n\e[201~' "$(cat "$CLIP")" | od -c)" "$(od -c <"$AGENT_LOG")" "the agent got the description as one paste, unsent"
+  assert_eq "$AGENT" "$(focused_block)" "focus moved to the Agent Pane"
+  note_says "Sent to Claude Code and copied"
+  pick_teardown
+}
+
+test_pick_from_an_agent_pane_sends_there_of_several() {
+  pick_setup || { pick_teardown; return; }
+  start_agent "$ANCHOR" || { pick_teardown; return; }
+  local first=$AGENT first_log=$AGENT_LOG
+  start_agent "$ANCHOR" || { pick_teardown; return; }
+  start_pick "$first"
+  assert_eq "$first" "$(printf '%s' "$DO_OUT" | jq -r '.agent // empty')" "the pane it ran from"
+  "$KB" ctl -i "$BROWSER_ID" click '#save' >/dev/null
+  wait_for_paste "$first_log" || fail "nothing was pasted into the agent it ran from"
+  sleep 0.5
+  assert_eq 0 "$(wc -c <"$AGENT_LOG" | tr -d ' ')" "the other agent got nothing"
+  pick_teardown
+}
+
+test_pick_with_several_agents_only_copies() {
+  pick_setup || { pick_teardown; return; }
+  start_agent "$ANCHOR" || { pick_teardown; return; }
+  local first_log=$AGENT_LOG
+  start_agent "$ANCHOR" || { pick_teardown; return; }
+  start_pick
+  assert_eq "" "$(printf '%s' "$DO_OUT" | jq -r '.agent // empty')" "no Agent Pane chosen of two"
+  assert_contains "$(printf '%s' "$DO_OUT" | jq -r '.why // empty')" "2 agent panes here (Claude Code, Claude Code)" "why"
+  "$KB" ctl -i "$BROWSER_ID" click '#save' >/dev/null
+  wait_for_clip || fail "nothing was copied"
+  note_says "Copied to the clipboard (2 agent panes here"
+  assert_eq "0 0" "$(wc -c <"$first_log" | tr -d ' ') $(wc -c <"$AGENT_LOG" | tr -d ' ')" "neither agent got anything"
+  pick_teardown
+}
+
+test_pick_reaches_an_agent_in_another_window() {
+  pick_setup || { pick_teardown; return; }
+  start_agent -w || { pick_teardown; return; }
+  start_pick
+  assert_eq "$AGENT" "$(printf '%s' "$DO_OUT" | jq -r '.agent // empty')" "the agent in the session's other window"
+  "$KB" ctl -i "$BROWSER_ID" click '#save' >/dev/null
+  wait_for_paste "$AGENT_LOG" || fail "nothing was pasted into the agent in the other window"
+  pick_teardown
+}
+
+test_pick_never_types_into_a_shell() {
+  pick_setup || { pick_teardown; return; }
+  start_pick "$ANCHOR"
+  assert_eq "" "$(printf '%s' "$DO_OUT" | jq -r '.agent // empty')" "a shell isn't an Agent Pane"
+  assert_eq "no Claude Code, Codex or Cursor pane here" "$(printf '%s' "$DO_OUT" | jq -r '.why // empty')" "why"
+  "$KB" ctl -i "$BROWSER_ID" click '#save' >/dev/null
+  wait_for_clip || fail "nothing was copied"
+  note_says "Copied to the clipboard (no Claude Code, Codex or Cursor pane here)"
+  case $("$REX" capture -s "$SESSION" -b "$ANCHOR") in *"path: #save"*) fail "the description was typed into the shell" ;; esac
+  pick_teardown
+}
+
+test_pick_skips_an_agent_that_quit() {
+  pick_setup || { pick_teardown; return; }
+  start_agent "$ANCHOR" || { pick_teardown; return; }
+  start_pick
+  "$REX" block close -s "$SESSION" "$AGENT" >/dev/null 2>&1
+  "$KB" ctl -i "$BROWSER_ID" click '#save' >/dev/null
+  wait_for_clip || fail "nothing was copied"
+  note_says "Copied to the clipboard (Claude Code is no longer running there)"
+  pick_teardown
+}
+
 test_pick_without_a_browser_pane_says_so() {
   trex_do trex_pick
   [ "$DO_STATUS" != 0 ] || fail "trex_pick with no Browser Pane succeeded: $DO_OUT"

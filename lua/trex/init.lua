@@ -138,13 +138,14 @@ function M.setup(opts)
     js = DIR .. "/pick.js",
     waiter = DIR .. "/pick-wait.sh",
     clipboard = opts.clipboard or "/usr/bin/pbcopy",
+    rex = opts.rex or find_rex(home),
   }
 
   rex.action{
     name = "trex_pick",
     title = "Trex: Pick Element",
-    description = "Hover the page in the Browser Pane and click an element to copy a description of it"
-      .. " for a coding agent. Run it again, or press Esc, to stop.",
+    description = "Hover the page in the Browser Pane and click an element: a description of it goes to the"
+      .. " Claude Code, Codex or Cursor pane, unsent, and to the clipboard. Run it again, or press Esc, to stop.",
     category = "Trex",
     keywords = "trex pick element handoff agent grab select copy describe react component selector",
     run = function(ctx) return pick.toggle(ctx) end,

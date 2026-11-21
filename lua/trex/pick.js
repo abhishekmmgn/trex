@@ -13,7 +13,8 @@
 // element under the pointer.
 //
 // pick-wait.sh then calls globalThis.__trexPick.wait(ms) in a loop. It resolves
-// to "picked\n" + the description, "cancelled", or "pending" when `ms` passes
+// to "picked\n" + the description as a JSON string + "\n" + the description,
+// "cancelled", or "pending" when `ms` passes
 // first (kb gives up on a request after 30 s, so each wait is shorter). If no
 // wait comes for LEASE ms, the waiter is gone and pick mode ends by itself.
 (() => {
@@ -364,6 +365,10 @@
 
   const stop = e => { e.preventDefault(); e.stopImmediatePropagation(); };
 
+  // What wait() gives pick-wait.sh for a pick: the description as a JSON
+  // string (one line, for the paste it sends Rex), then as text (to copy).
+  const picked = description => 'picked\n' + JSON.stringify(description + '\n') + '\n' + description;
+
   const release = () => { for (const [type, fn] of clicking) removeEventListener(type, fn, true); };
 
   const finish = value => {
@@ -423,8 +428,8 @@
     swallowUntil = performance.now() + 1000;
     looking = true;
     label.textContent = 'Finding source…';
-    reactOf(el).then(react => finish('picked\n' + describe(el, react)),
-      () => finish('picked\n' + describe(el, null)));
+    reactOf(el).then(react => finish(picked(describe(el, react))),
+      () => finish(picked(describe(el, null))));
   };
 
   const onRest = e => {

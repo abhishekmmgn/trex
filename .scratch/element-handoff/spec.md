@@ -11,14 +11,14 @@ The user points at something in a Browser Pane and tells the coding agent "chang
 - **Started by a command.** "Trex: Pick Element" in the Rex palette, bound to a new key. kb's own Inspect key (`Ctrl+Shift+C` / `Cmd+Shift+C`) stays as it is. The proposed key is `cmd+shift+e`, to be checked against Rex's app shortcuts (ticket 01; an app shortcut wins over `init.lua`).
 - **A menu in kb's top bar comes later.** A dropdown next to kb's ✕ needs kb's code, so it is a separate upstream ticket (04), like tickets 05 and 08 in `trex`.
 - **One pick, then exit.** A click hands off one element and pick mode ends. Run the command again for another.
-- **The Agent Pane is the pane the user was in last.** That means the last focused pane in the Browser Pane's Rex window that isn't a Browser Pane or a DevTools Pane.
+- **The Agent Pane is the pane running Claude Code, Codex or Cursor's CLI** (changed 2026-11-21: the user uses only these three, and Rex gives config Lua no focus events, so "the pane the user was in last" can't be tracked). It is the pane the command ran from, if an agent runs there; else the one agent pane in the Browser Pane's Rex window, else in its session (another tab); of several, the one last focused in its window. With none, or several that can't be told apart, the description is only copied, and the note says why.
 
 ## How it works
 
 1. **Start.** The command works from a Browser Pane, or from any other pane with a Browser Pane beside it (resolved the way `bin/trex browser` does it). In the second case the pane the command ran from is the Agent Pane. Running it again while picking cancels.
 2. **Pick mode.** trex adds an overlay to the Browser Pane's page through kb's control socket (`kb ctl -i ID eval`, which waits on a promise). The overlay is drawn the way kb's own Inspect is (`src/app.rs`, `HOVER`): margin, border, padding and content boxes plus a label, in a layer that ignores the mouse. Capture-phase listeners on the page take pointer moves, presses and clicks, so the page never sees the click that picks. The wheel still scrolls. Esc cancels. Navigating away ends pick mode.
 3. **Describe.** On click, the page builds the description below from the element and returns it. The React part is found from the element at that moment (`__reactFiber$…` on the DOM node), so it works on any open page. The app doesn't have to include react-grab, and no reload is needed.
-4. **Hand off.** trex pastes the description into the Agent Pane with a paste event (`block.event`). A program that turned on bracketed paste, such as Claude Code or Codex, gets it as pasted text, so the newlines don't send it. trex also copies the description to the clipboard and moves focus to the Agent Pane. If there is no Agent Pane, the description only goes to the clipboard, and trex says so.
+4. **Hand off.** trex pastes the description into the Agent Pane with a paste event (`block.event`). Claude Code, Codex and Cursor's CLI all turn on bracketed paste, so they get it as pasted text and the newlines don't send it (Claude Code shows it as `[Pasted text #1 +7 lines]`). Just before pasting, trex checks an agent still runs there, so it never types into a shell. It also copies the description to the clipboard and moves focus to the Agent Pane (switching tabs if needed). If there is no Agent Pane, the description only goes to the clipboard, and the note on the page says why.
 
 ## The description
 
@@ -81,5 +81,4 @@ The same seam as Phase 1: trex actions driven with `rex do` in a throwaway Rex s
 
 ## Open questions
 
-- Does Rex let a Lua plugin hear focus changes (`rex.on`), so trex can remember the last focused pane per window? If not, fall back to: the only other pane in the window, else clipboard only.
 - Should focus move to the Agent Pane after the handoff? The spec says yes, so the user can type their request at once. Confirm once it's in use.
