@@ -70,7 +70,7 @@ changing trex's Lua.
 - **Trex: Open Browser…** (`cmd+shift+b`): asks for a URL (the field starts empty; `localhost:3000` is the hint) and opens a Browser Pane, `kb --devtools URL`, to the right
   of the focused pane. An empty answer opens the default. A bare port such as `3000` or `:3000` opens `http://localhost:3000`. Input starting with `-`
   is refused, because kb would read it as a flag. If the installed kb isn't the pinned commit, it says so and doesn't open.
-- **F12** in a Browser Pane, or **Trex: Toggle DevTools** from the palette: opens a DevTools Pane beside it, with Chrome DevTools for that pane's
+- **F12** or **`cmd+shift+i`** in a Browser Pane, or **Trex: Toggle DevTools** from the palette: opens a DevTools Pane beside it, with Chrome DevTools for that pane's
   page, and leaves focus in the Browser Pane. F12 again, in the Browser Pane or the DevTools Pane, closes it. The pane is labelled
   `trex devtools <kb id>`.
   - DevTools attaches to the window kb shows. When the page has opened windows of its own, trex picks the one whose URL and title kb reports;
@@ -82,8 +82,8 @@ changing trex's Lua.
   - Closing the Browser Pane (or quitting its kb) closes its DevTools Pane.
   - Following the page, remembering the side and closing with the Browser Pane are done by a watcher each DevTools Pane runs,
     `rex do lua/trex/devtools-watch.lua`. It exits when the DevTools Pane closes.
-  - F12 in any pane running kb is always taken by trex, because kb's own F12 opens DevTools in a desktop Chrome window (and can land in another kb's
-    Chrome). F12 in any other pane reaches the program there unchanged.
+  - F12 and `cmd+shift+i` in any pane running kb are always taken by trex, because kb's own F12 opens DevTools in a desktop Chrome window (and can
+    land in another kb's Chrome). In any other pane they reach the program there unchanged, so trex never takes `cmd+shift+i` from anything else.
   - When F12 can't do its work (say the kb was started without `--devtools`), it says why in a notice floating at the top of the window. The
     notice doesn't take focus and goes after 8 seconds. The palette action reports the same message the usual way.
   - The DevTools Pane's KittyBrowser is a second kb, started with its own `KB_SOCKET` (`~/.kittybrowser/trex-devtools/<kb id>.sock`) and Chrome profile

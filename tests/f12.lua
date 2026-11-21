@@ -1,7 +1,8 @@
--- Presses F12 in a block with trex's real F12 binding (lua/trex/f12.lua) loaded,
--- without touching the user's config:
+-- Presses F12 (or, given key = "cmd+shift+i", that) in a block with trex's
+-- real DevTools key binding (lua/trex/f12.lua) loaded, without touching the
+-- user's config:
 --
---   rex do tests/f12.lua -s SESSION -b BLOCK --json [--args '{"fail":"MESSAGE"}']
+--   rex do tests/f12.lua -s SESSION -b BLOCK --json [--args '{"fail":"MESSAGE","key":"cmd+shift+i"}']
 --
 -- `rex do` scripts can't bind keys, so this loads the binding as a client script
 -- on this script's own connection (client.set_script) and presses F12 there
@@ -39,7 +40,13 @@ end)
 local set, err = rex.call("client.set_script", { scripts = { { name = "trex-f12-test.lua", source = source } } })
 if set == nil then error("client.set_script: " .. tostring(err), 0) end
 
+local KEYS = {
+  f12 = { key = "f12", mods = "", unshifted_codepoint = 0 },
+  ["cmd+shift+i"] = { key = "key_i", mods = "shift+super", unshifted_codepoint = 105 },
+}
+local key = KEYS[(rex.args and rex.args.key) or "f12"] or error("tests/f12.lua: no such key", 0)
 local res, kerr = rex.call("client.key", { session_id = rex.session_id, block_id = rex.block_id,
-  key = { key = "f12", mods = "", consumed_mods = "", text = "", unshifted_codepoint = 0, composing = false, action = "press" } })
+  key = { key = key.key, mods = key.mods, consumed_mods = "", text = "", unshifted_codepoint = key.unshifted_codepoint,
+    composing = false, action = "press" } })
 if res == nil then error("client.key: " .. tostring(kerr), 0) end
 return { handled = res.handled == true }

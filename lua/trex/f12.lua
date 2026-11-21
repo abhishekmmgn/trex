@@ -1,9 +1,11 @@
--- F12's key binding.
+-- The DevTools keys' binding: F12 and cmd+shift+i (KEYS).
 --
--- F12 in a pane whose foreground program is kb (a Browser Pane, or a DevTools
--- Pane) always ends in trex: kb's own F12 runs `open -a "Google Chrome.app"
--- <inspector>`, which can land in another kb's headless Chrome. F12 anywhere else
--- returns false, so Rex sends it on to the program in the pane unchanged.
+-- Either key in a pane whose foreground program is kb (a Browser Pane, or a
+-- DevTools Pane) always ends in trex: kb's own F12 runs `open -a "Google
+-- Chrome.app" <inspector>`, which can land in another kb's headless Chrome.
+-- Anywhere else the key function returns false, so Rex sends the key on to the
+-- program in the pane unchanged. (kb's own DevTools keys are F12, ctrl+shift+i
+-- and alt+cmd+i; Rex's config binds nothing else to cmd+shift+i.)
 --
 -- A key function can't prompt or fail the way an action does, and Rex gives
 -- plugins no way to post one of its own floating notifications (ticket 03,
@@ -14,7 +16,7 @@
 -- This file uses only rex.bind, rex.session, rex.block.call and pcall, so the
 -- tests can load it as a client script, where io, rex.exec and dofile don't exist.
 --
--- Loaded as loadfile("f12.lua")(util) → bind(on_kb_pane): binds F12 to call
+-- Loaded as loadfile("f12.lua")(util) → bind(on_kb_pane): binds KEYS to call
 -- on_kb_pane(ctx) in kb panes.
 
 local util = ...
@@ -43,8 +45,10 @@ local function notice(block_id, message)
   }
 end
 
+local KEYS = { "f12", "cmd+shift+i" }
+
 return function(on_kb_pane)
-  rex.bind("f12", function(ctx)
+  local function on_key(ctx)
     if ctx.block_id == nil or foreground(ctx.block_id) ~= "kb" then return false end
     -- A key function that raises, or runs over 5 s, swallows the key anyway, so
     -- catch errors, log them and show them; the key is consumed either way.
@@ -54,5 +58,6 @@ return function(on_kb_pane)
       pcall(notice, ctx.block_id, tostring(err))
     end
     return true
-  end)
+  end
+  for _, key in ipairs(KEYS) do rex.bind(key, on_key) end
 end

@@ -30,7 +30,7 @@ installs_cleanly() { # CONFIG
   assert_eq "Trex: Open Browser…" "$(printf '%s' "$after" | jq -r '.actions[] | select(.name == "trex_open") | .title')" "palette title"
   assert_eq "Trex: Toggle DevTools" "$(printf '%s' "$after" | jq -r '.actions[] | select(.name == "trex_devtools") | .title')" "DevTools palette title"
   assert_eq "Trex: Pick Element" "$(printf '%s' "$after" | jq -r '.actions[] | select(.name == "trex_pick") | .title')" "Pick Element palette title"
-  assert_eq "$((before + 3))" "$(printf '%s' "$after" | jq '.bindings')" "three more key bindings (cmd+shift+b, f12, cmd+shift+e)"
+  assert_eq "$((before + 4))" "$(printf '%s' "$after" | jq '.bindings')" "four more key bindings (cmd+shift+b, f12, cmd+shift+i, cmd+shift+e)"
   assert_contains "$(cat "$1")" "dofile(\"$TREX_ROOT/lua/trex/init.lua\").setup(" "block loads trex from --repo"
 }
 

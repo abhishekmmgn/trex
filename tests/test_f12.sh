@@ -22,10 +22,11 @@ pane_running() { # NAME ARGV...
   return 1
 }
 
-# Presses F12 in BLOCK. Given FAIL, trex's stub handler raises that message.
-press_f12() { # BLOCK [FAIL]  → sets $HANDLED
-  local out args='{}'
-  [ -n "${2:-}" ] && args=$(jq -nc --arg m "$2" '{fail: $m}')
+# Presses F12 (or KEY, such as cmd+shift+i) in BLOCK. Given FAIL, trex's stub
+# handler raises that message.
+press_f12() { # BLOCK [FAIL] [KEY]  → sets $HANDLED
+  local out args
+  args=$(jq -nc --arg m "${2:-}" --arg k "${3:-f12}" '{key: $k} + (if $m == "" then {} else {fail: $m} end)')
   out=$("$REX" do "$TREX_ROOT/tests/f12.lua" -s "$SESSION" -b "$1" --timeout 20s --json --args "$args" 2>&1) ||
     { fail "f12.lua: $out"; return 1; }
   HANDLED=$(printf '%s' "$out" | jq -r '.handled')
@@ -61,6 +62,26 @@ test_f12_is_consumed_in_a_pane_running_kb() {
   assert_eq "trex f12" "$(label_of "$block")" "trex's handler ran"
   sleep 0.5
   case "$(screen "$block")" in *"[24~"*) fail "F12 reached the program in the kb pane" ;; esac
+  rm -f "$dir/kb"; rmdir "$dir"
+}
+
+test_cmd_shift_i_passes_through_in_a_pane_not_running_kb() {
+  local block
+  block=$(pane_running cat /bin/cat -v) || { fail "no pane running cat"; return; }
+  press_f12 "$block" "" cmd+shift+i || return
+  assert_eq "false" "$HANDLED" "cmd+shift+i handled by trex"
+  [ "$(label_of "$block")" != "trex f12" ] || fail "trex's handler ran in a pane not running kb"
+}
+
+test_cmd_shift_i_toggles_devtools_in_a_pane_running_kb() {
+  local dir block
+  dir=$(mktemp -d)
+  cp /bin/cat "$dir/kb"
+  /usr/bin/codesign --force -s - "$dir/kb" 2>/dev/null || { fail "couldn't sign the fake kb"; rm -f "$dir/kb"; rmdir "$dir"; return; }
+  block=$(pane_running kb "$dir/kb" -v) || { fail "no pane running the fake kb"; rm -f "$dir/kb"; rmdir "$dir"; return; }
+  press_f12 "$block" "" cmd+shift+i
+  assert_eq "true" "$HANDLED" "cmd+shift+i handled by trex"
+  assert_eq "trex f12" "$(label_of "$block")" "trex's DevTools handler ran"
   rm -f "$dir/kb"; rmdir "$dir"
 }
 
