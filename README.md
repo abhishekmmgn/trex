@@ -19,6 +19,9 @@ See `.scratch/trex/spec.md`, `GLOSSARY.md` and `docs/adr/`.
     changes, and points it at the window the Browser Pane's kb shows.
   - `f12.lua`: the F12 binding, and the notice it shows when something fails. Uses only `rex.bind`/`rex.session`/`rex.block.call`, so tests can load
     it as a client script.
+  - `pick.lua`, `pick.js`, `pick-wait.sh`: Element Handoff's pick mode (`.scratch/element-handoff/`). `pick.lua` finds the Browser Pane and turns
+    pick mode on or off by running `pick.js` in its page (`kb ctl -i ID eval`); `pick-wait.sh`, started in the background, waits for the pick and
+    copies the description.
   - `state.lua`: trex's saved state (`~/.local/state/trex/state.json`): the side DevTools was last on.
 - `bin/trex`: adds or removes the marked block in Rex's config. `bin/trex browser|ctl|mcp` (`bin/trex-agent`) are for agents, see Agents.
   `bin/trex setup` is `bin/trex-setup`. `bin/trex-lib.sh` holds the shell helpers they and the tests share.
@@ -88,6 +91,22 @@ changing trex's Lua.
     driving the Browser Pane. To reach it: `KB_SOCKET=~/.kittybrowser/trex-devtools/<kb id>.sock kb ctl status`.
   - It first loads `http://127.0.0.1:PORT/json/version`, sets `screencast-enabled=false` in that origin's localStorage (where DevTools keeps its
     settings), then opens the inspector, so DevTools never shows its page preview.
+- **Trex: Pick Element** (`cmd+shift+e`), in a Browser Pane or a pane beside one: hover the page to outline elements, click one, and a description
+  of it for a coding agent is copied to the clipboard (a note on the page says so). Esc, or the command again, stops. The click that picks never
+  reaches the page; the wheel still scrolls. The description:
+
+  ```
+  <button id="save" class="btn primary">
+  page: http://localhost:3000/settings
+  path: #save
+  box: 112×32 at 94,131 (page px)
+  html: <button id="save" type="submit" class="btn primary">Save changes</button>
+  ```
+
+  - `path` is built like kb's Inspect selector (tag names and `:nth-of-type` from the nearest unique id); `box` is size and position in page
+    pixels; `html` is the opening tag and text, cut at 300 characters.
+  - The outline and listeners live in the page, so a reload or navigation ends pick mode. If trex's waiter goes away, the page ends it by itself
+    after 90 s. kb's own Inspect (`Ctrl+Shift+C`) is unchanged.
 
 ## Agents
 

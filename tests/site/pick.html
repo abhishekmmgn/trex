@@ -1,0 +1,31 @@
+<!doctype html><html><head><title>trex pick page</title>
+<style>
+  body { margin: 0; font: 16px system-ui, sans-serif; }
+  main { padding: 24px; }
+  .actions { margin-top: 40px; }
+  #save { margin: 8px; padding: 6px 12px; border: 2px solid #333; }
+  #tall { height: 3000px; background: linear-gradient(#fff, #99c); }
+</style></head>
+<body>
+<main id="app">
+  <h1>Pick test</h1>
+  <form onsubmit="return false">
+    <div class="actions toolbar wide extra">
+      <button type="button" class="btn">Cancel</button>
+      <button id="save" type="submit" class="btn primary">Save   changes</button>
+    </div>
+    <input id="name" value="x">
+  </form>
+  <p id="long"></p>
+</main>
+<div id="tall"></div>
+<script>
+  // What the page itself heard: a pick must leave every count at 0.
+  window.heard = { pointerdown: 0, mousedown: 0, pointerup: 0, mouseup: 0, click: 0, keydown: 0, focus: 0 };
+  for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click', 'keydown']) {
+    document.addEventListener(type, () => { window.heard[type]++; });
+  }
+  document.addEventListener('focusin', () => { window.heard.focus++; });
+  document.getElementById('long').textContent = 'word '.repeat(200);
+</script>
+</body></html>
