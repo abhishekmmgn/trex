@@ -9,6 +9,7 @@
 --   crates2  cargo's install record, for the pin check (default ~/.cargo/.crates2.json)
 --   rex      path of the rex CLI (default: the one Rex's server runs from)
 --   state    trex's state file (default ~/.local/state/trex/state.json)
+--   clipboard a command that copies its stdin, for Element Handoff (default /usr/bin/pbcopy)
 --
 -- Config Lua runs in the Rex server: its PATH is only /usr/bin:/bin, and it has
 -- no rex.sleep or rex.on. Use absolute paths and keep actions short.
@@ -131,6 +132,24 @@ function M.setup(opts)
   -- In config, rex.invoke reaches only actions of the file that defined them, so
   -- the key calls the function rather than the action.
   load("f12", util)(toggle_devtools)
+
+  local pick = load("pick", util).new{
+    kb = kb,
+    js = DIR .. "/pick.js",
+    waiter = DIR .. "/pick-wait.sh",
+    clipboard = opts.clipboard or "/usr/bin/pbcopy",
+  }
+
+  rex.action{
+    name = "trex_pick",
+    title = "Trex: Pick Element",
+    description = "Hover the page in the Browser Pane and click an element to copy a description of it"
+      .. " for a coding agent. Run it again, or press Esc, to stop.",
+    category = "Trex",
+    keywords = "trex pick element handoff agent grab select copy describe react component selector",
+    run = function(ctx) return pick.toggle(ctx) end,
+  }
+  rex.bind("cmd+shift+e", "trex_pick")
 end
 
 return M
