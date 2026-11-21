@@ -46,3 +46,5 @@ jpeg 100, pixels by file              15.5      5.8       5.8    28.6     35    
 jpeg 90, pixels by file               16.7      5.3       6.4    28.7     35       285        0
 
 ```
+- 2026-11-21 shadcn test (Haiku agent, throwaway session; full results in the orchestrator scratchpad `notes/shadcn-test.md`): clicks on Dialog, Dropdown, Tabs, Accordion take 300–370 ms through `kb ctl`; Ctrl+K, `/`, typing, arrows, Enter, Escape, Tab, Space all reach the page through `rex send-key`; `cmd+k` did not (Rex binds it). Key-to-page typing about 57–59 ms including about 20 ms of `kb ctl eval` overhead.
+- kb's default frame mode is "png, changed tiles by file". At Retina half-width on Wikipedia it measured **27 fps** scrolling (37 ms per frame), just under the 30 fps target; it reached 78 fps only in a small 80x24 pane. The user finds scrolling fine in practice. Per this ticket, measure the miss to its cause before changing anything.
