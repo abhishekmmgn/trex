@@ -72,7 +72,8 @@ changing trex's Lua.
 
 ## Use
 
-- **Trex: Open Browser…** (`cmd+shift+b`): asks in the command palette and opens a Browser Pane, `kb --devtools URL`, to the right of the focused pane.
+- **Trex: Open Browser…** (`cmd+shift+b`): asks in the command palette and opens a Browser Pane, `kb --devtools URL`, to the right of the focused pane
+  (with `open_in` set to `"window"` in the config, in a new Rex window of the session, focused).
   The list filters as you type. Its first row is the `default_url` setting (`http://localhost:3000` unless the config says otherwise), then up to 50 URLs
   from kb's history (`~/.kittybrowser/history`, read each time the prompt opens), ranked by visits and recency (visits x 4 when seen in the last 4 hours,
   x 2 in 24 hours, x 1 in 7 days, x 0.5 older). Enter on a row opens it. Enter on text that matches no row opens that text: a bare port such as `3000` or
@@ -134,6 +135,10 @@ changing trex's Lua.
 trex's settings are in `~/.config/trex/config.json` (`$XDG_CONFIG_HOME/trex/config.json`), next to `config.schema.json`, which gives editors
 completion, hover help and red squiggles (ADR-0003). `bin/trex setup` creates both with every default written out. It never overwrites an existing
 config, and it refreshes the schema. A missing file means all defaults, and a missing key gets its default.
+
+- `open_in` (`"split"`|`"window"`): `"split"` (default) opens a Browser Pane right of the focused pane, `"window"` in a new Rex window of the focused
+  pane's session. A Browser Pane in its own window keeps its DevTools Pane in that window. F12 works there, and Pick Element and `trex browser` from an
+  Agent Pane in another window find it while the session has one Browser Pane (with two in other windows they list both and ask for `trex ctl -i ID`).
 
 ```json
 { "$schema": "./config.schema.json", "default_url": "http://localhost:3000", "open_in": "split",
