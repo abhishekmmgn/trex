@@ -12,7 +12,7 @@ Possible shapes (for the upstream discussion, pick one):
 
 **Status:** ready-for-agent
 
-- [ ] An upstream PR (or issue, if the maintainer prefers to discuss first) proposes one of the shapes above
+- [x] An upstream PR (or issue, if the maintainer prefers to discuss first) proposes one of the shapes above
 - [ ] Once merged and the pin moves, `bin/trex ctl`/`mcp` either go away or become thin aliases
 
 ## Comments
@@ -20,3 +20,4 @@ Possible shapes (for the upstream discussion, pick one):
 - 2026-11-21: the user chose to send this as a second upstream PR, separate from 05. Shape: the first one (`control::connect` prefers the kb in the caller's Rex window), which also covers `kb mcp serve` started from the Agent Pane.
 - 2026-11-21: built in `/Users/abhishekmmgn/Projects/trex-browser-callers-pane`, branch `kb-targets-callers-pane` (2782544, from upstream d252d5f), with upstream tracking removed. With `REX_SESSION` set and no `-i`/`KB_INSTANCE`/`KB_SOCKET`, `kb ctl` and `kb mcp serve` pick the kb in the caller's Rex window, then its session. Several matches fail with a list; none, or outside Rex, falls back to today's behaviour. kb asks `rex block ls --json`, with a 2 s timeout and a session fallback. All of kb's CI steps pass (89 tests, 7 new), and it was checked live in a throwaway session. `kb mcp serve` was not tried by hand. Draft PR text is in the worktree as `PR_DRAFT.md`, untracked. Not pushed.
 - 2026-11-21: pushed to the fork only (`origin` = `abhishekmmgn/trex-browser`), branch `kb-targets-callers-pane` (2782544). No PR. It is merged into `trex-pin` (1cc86f1, with `scroll-quality`), which trex now pins (ADR-0002). kb's CI steps pass on `trex-pin` (fmt, clippy on macOS and the Linux target, 94 tests, release build).
+- 2026-11-21: the user asked for the upstream PR; opened https://github.com/graiz/KittyBrowser/pull/15 (branch kb-targets-callers-pane).
