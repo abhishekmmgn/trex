@@ -183,3 +183,139 @@ test_config_reload_command_reaches_the_server_and_reports() {
 assert_status_code_is() { # EXPECTED ACTUAL MESSAGE
   assert_eq "$1" "$2" "$3: exit status"
 }
+
+# --- trex config edit ------------------------------------------------------------
+# The editor is a stub script: it copies the next of the files 1, 2, ... in $STUB_DIR over
+# the file it is given (and leaves it alone when there are none left). The prompt's answers
+# are fed on stdin. The server is the test's throwaway session (TREX_RELOAD_DO).
+
+# edit_flow ANSWERS [VAR=VALUE...]: runs `trex config edit`; sets $EDIT_OUT (stdout+stderr) and $EDIT_STATUS.
+edit_flow() {
+  local answers=$1; shift
+  EDIT_OUT=$(printf '%b' "$answers" | env "$@" XDG_CONFIG_HOME="$(CFG_XDG)" TREX_STUB_DIR="$STUB_DIR" \
+    TREX_RELOAD_DO="$TREX_ROOT/tests/load.lua --action trex_reload_config -s $SESSION -b $ANCHOR" \
+    "$TREX_ROOT/bin/trex" config edit 2>&1)
+  EDIT_STATUS=$?
+}
+
+make_stub_editor() { # sets $STUB_DIR and $STUB_EDITOR
+  STUB_DIR=$(mktemp -d)
+  STUB_EDITOR="$STUB_DIR/editor"
+  cat >"$STUB_EDITOR" <<'STUB'
+#!/bin/sh
+n=$(cat "$TREX_STUB_DIR/n" 2>/dev/null || echo 0)
+n=$((n + 1)); echo "$n" >"$TREX_STUB_DIR/n"
+echo "$0 $*" >>"$TREX_STUB_DIR/calls"
+[ -f "$TREX_STUB_DIR/$n" ] && cp "$TREX_STUB_DIR/$n" "$1"
+exit 0
+STUB
+  chmod +x "$STUB_EDITOR"
+}
+
+test_config_edit_creates_the_files_and_reloads_a_valid_file() {
+  make_stub_editor
+  printf '{ "open_in": "window" }\n' >"$STUB_DIR/1"
+  edit_flow "" EDITOR="$STUB_EDITOR"
+  assert_eq "0" "$EDIT_STATUS" "exits 0: $EDIT_OUT"
+  assert_contains "$EDIT_OUT" "is valid" "says valid"
+  assert_contains "$EDIT_OUT" "reloaded $TREX_CONFIG" "and that it reloaded"
+  assert_eq "ok" "$([ -f "$(dirname "$TREX_CONFIG")/config.schema.json" ] && echo ok)" "the schema is created"
+  assert_eq "window" "$(jq -r .open_in "$TREX_CONFIG")" "the file is the editor's"
+  trex_do trex_reload_config
+  assert_eq "window" "$(printf '%s' "$DO_OUT" | jq -r '.settings.open_in')" "the server holds the new settings"
+  rm -rf "$STUB_DIR"
+}
+
+test_config_edit_opens_a_new_file_filled_with_every_default() {
+  make_stub_editor
+  edit_flow "" EDITOR="$STUB_EDITOR"
+  assert_eq "0" "$EDIT_STATUS" "exits 0: $EDIT_OUT"
+  assert_eq "$(cat "$TREX_ROOT/lua/trex/config.default.json")" "$(cat "$TREX_CONFIG")" "a new file is every default"
+  assert_contains "$(cat "$STUB_DIR/calls")" "$TREX_CONFIG" "the editor was given the config path"
+  rm -rf "$STUB_DIR"
+}
+
+test_config_edit_prefers_visual_then_editor() {
+  make_stub_editor
+  local other="$STUB_DIR/other"; printf '#!/bin/sh\necho other >>"$TREX_STUB_DIR/other-calls"\n' >"$other"; chmod +x "$other"
+  edit_flow "" VISUAL="$STUB_EDITOR" EDITOR="$other"
+  assert_eq "1" "$(cat "$STUB_DIR/n")" "VISUAL ran"
+  assert_eq "" "$(cat "$STUB_DIR/other-calls" 2>/dev/null)" "not EDITOR"
+  edit_flow "" -u VISUAL EDITOR="$STUB_EDITOR --flag"
+  assert_eq "2" "$(cat "$STUB_DIR/n")" "EDITOR ran when VISUAL is unset"
+  assert_contains "$(tail -n1 "$STUB_DIR/calls")" "--flag $TREX_CONFIG" "an editor with arguments works"
+  rm -rf "$STUB_DIR"
+}
+
+test_config_edit_invalid_file_lists_problems_and_edit_again_can_fix_it() {
+  make_stub_editor
+  printf '{ "open_in": "tab" }\n' >"$STUB_DIR/1"
+  printf '{ "open_in": "window" }\n' >"$STUB_DIR/2"
+  edit_flow "e\n" EDITOR="$STUB_EDITOR"
+  assert_eq "0" "$EDIT_STATUS" "exits 0 once fixed: $EDIT_OUT"
+  assert_contains "$EDIT_OUT" 'line 1: open_in: must be one of "split", "window", not "tab"' "lists the problem with key and line"
+  assert_contains "$EDIT_OUT" "(e)dit again / (k)eep anyway / (r)evert?" "asks"
+  assert_eq "2" "$(cat "$STUB_DIR/n")" "the editor ran twice"
+  assert_contains "$EDIT_OUT" "reloaded" "reloaded after the fix"
+  rm -rf "$STUB_DIR"
+}
+
+test_config_edit_keep_leaves_the_file_and_the_last_good_settings_stay() {
+  make_stub_editor
+  write_config '{ "open_in": "window" }'
+  trex_do trex_reload_config
+  assert_status 0 "a good file is loaded first"
+  printf '{ "open_in": "tab" }\n' >"$STUB_DIR/1"
+  edit_flow "k\n" EDITOR="$STUB_EDITOR"
+  assert_eq "1" "$EDIT_STATUS" "exits 1"
+  assert_eq "tab" "$(jq -r .open_in "$TREX_CONFIG")" "the file is left as written"
+  assert_contains "$EDIT_OUT" "Keeping the last good settings" "the server says what it keeps"
+  config_flow
+  assert_eq "window" "$(printf '%s' "$CFG_OUT" | jq -r '.settings.open_in')" "after a restart the last good settings are used"
+  rm -rf "$STUB_DIR"
+}
+
+test_config_edit_revert_restores_the_last_good_file() {
+  make_stub_editor
+  write_config '{ "open_in": "window", "devtools": { "side": "left" } }'
+  trex_do trex_reload_config
+  assert_status 0 "a good file is loaded first"
+  local good; good=$(cat "$TREX_CONFIG")
+  printf '{ "open_in": "tab" }\n' >"$STUB_DIR/1"
+  edit_flow "r\n" EDITOR="$STUB_EDITOR"
+  assert_eq "0" "$EDIT_STATUS" "exits 0: $EDIT_OUT"
+  assert_eq "$good" "$(cat "$TREX_CONFIG")" "the last good file is back"
+  assert_contains "$EDIT_OUT" "reverted" "says so"
+  rm -rf "$STUB_DIR"
+}
+
+test_config_edit_revert_with_no_last_good_file_goes_back_to_the_defaults() {
+  make_stub_editor
+  printf '{ "open_in": "tab" }\n' >"$STUB_DIR/1"
+  edit_flow "r\n" EDITOR="$STUB_EDITOR"
+  assert_eq "$(cat "$TREX_ROOT/lua/trex/config.default.json")" "$(cat "$TREX_CONFIG")" "the defaults"
+  rm -rf "$STUB_DIR"
+}
+
+test_config_edit_asks_again_on_an_unknown_answer_and_keeps_the_file_when_stdin_ends() {
+  make_stub_editor
+  printf '{ "open_in": "tab" }\n' >"$STUB_DIR/1"
+  edit_flow "what\n" EDITOR="$STUB_EDITOR"
+  assert_eq "1" "$EDIT_STATUS" "exits 1"
+  assert_eq "2" "$(printf '%s' "$EDIT_OUT" | grep -o '(e)dit again / ' | wc -l | tr -d ' ')" "asked twice"
+  assert_contains "$EDIT_OUT" "no answer; keeping the file" "end of input keeps the file"
+  assert_eq "tab" "$(jq -r .open_in "$TREX_CONFIG")" "as written"
+  rm -rf "$STUB_DIR"
+}
+
+test_config_edit_action_opens_a_split_beside_the_focused_pane() {
+  local before after new
+  before=$(block_ids | wc -l | tr -d ' ')
+  trex_do trex_edit_config
+  assert_status 0 "the action runs"
+  new=$(printf '%s' "$DO_OUT" | jq -r '.block_id')
+  case "$new" in block:*) ;; *) fail "no block id in $DO_OUT" ;; esac
+  BLOCKS_SEEN+=("$new")
+  after=$(block_ids | wc -l | tr -d ' ')
+  assert_eq "$((before + 1))" "$after" "one more pane"
+}

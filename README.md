@@ -140,6 +140,10 @@ config, and it refreshes the schema. A missing file means all defaults, and a mi
   "devtools": { "side": "below" }, "pick": { "stay_on": true } }
 ```
 
+- `bin/trex config edit`, or **Trex: Edit Config** in the palette (a split beside the focused pane): creates the file and schema if missing and opens
+  the file in `$VISUAL`, else `$EDITOR`, else `vi`. When the editor exits the file is checked, and a valid one is reloaded. With problems it lists
+  them and asks `(e)dit again / (k)eep anyway / (r)evert`. Revert puts back the last good file (the defaults if there is none yet). Keep leaves the
+  file, and the last good settings stay in effect. The palette pane runs `$SHELL -lic`, so an `$EDITOR` set in your shell startup files is seen.
 - `bin/trex config check`: prints each problem with its key, the allowed values and its line (a syntax error gives its line), and exits 1 if there
   are any. An unknown key is reported too. It is checked by `rex do lua/trex/config-check.lua`, the same code the server uses, so it needs Rex but
   nothing else.

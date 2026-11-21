@@ -2,49 +2,127 @@
 # `bin/trex config`: trex's settings file, $XDG_CONFIG_HOME/trex/config.json (default
 # ~/.config/trex/config.json). Modeled on `rex config check` and `rex config reload`.
 #
+#   bin/trex config edit      open the file in $VISUAL, else $EDITOR, else vi; check it when the editor exits
 #   bin/trex config check     check the file; print each problem with its key and line. Exits 1 if any
 #   bin/trex config reload    make the running Rex server use the file now (Trex: Reload Config)
 #
+# edit works like visudo: it creates the file and schema if missing, and when the editor
+# exits it checks the file. A valid file is reloaded. One with problems is listed, and
+# edit asks (e)dit again / (k)eep anyway / (r)evert, reading the answer from stdin. Revert
+# restores the last good file the server saved beside state.json (the defaults if there is
+# none). Keep leaves the file, and the last good settings stay in effect.
 # check runs lua/trex/config-check.lua with `rex do`, the same code the server checks
 # with. reload runs the server's trex_reload_config action, so the server has to be
 # running trex (`bin/trex install`). An invalid file is refused and the last good
-# settings stay. `bin/trex setup` creates the file.
+# settings stay. `bin/trex setup` creates the file too.
 
 set -u
 
 . "$(dirname "$0")/trex-lib.sh"
 
 usage() {
-  printf '%s\n' 'usage: trex config check     check the config file; print each problem with its key and line' \
+  printf '%s\n' 'usage: trex config edit      edit the config file; it is checked when the editor exits' \
+    '       trex config check     check the config file; print each problem with its key and line' \
     '       trex config reload    make the running Rex use the config file now' >&2
 }
 
-config_file="${XDG_CONFIG_HOME:-$HOME/.config}/trex/config.json"
+config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/trex"
+config_file="$config_dir/config.json"
+# The last good copy the server saves beside state.json (tests point TREX_STATE at their own).
+state_file="${TREX_STATE:-${XDG_STATE_HOME:-$HOME/.local/state}/trex/state.json}"
+last_good="$(dirname "$state_file")/last-good-config.json"
+
+check_file() {
+  "$REX" do "$TREX_DIR/lua/trex/config-check.lua" "config=$config_file"
+}
+
+# Test hook: TREX_RELOAD_DO replaces the action name (and any flags) after `rex do`,
+# so tests can reach a throwaway session instead of the live server.
+reload_server() {
+  local out target
+  read -r -a target <<<"${TREX_RELOAD_DO:-trex_reload_config}"
+  if out=$("$REX" do "${target[@]}" 2>&1); then
+    # The action's result is JSON, compact or not; its "message" is a string on one line.
+    printf '%s\n' "$out" | sed -nE 's/.*"message": *"(([^"\\]|\\.)*)".*/\1/p' | sed 's/\\n/\
+/g; s/\\"/"/g'
+  else
+    # The server's own words: what is wrong, and what is kept. Or, when the server
+    # doesn't know the action, that trex isn't loaded there.
+    printf '%s\n' "$out" | sed 's/^Error: //' >&2
+    case "$out" in
+      *"trex_reload_config"*) printf 'trex: is trex installed in Rex? Run `bin/trex install`.\n' >&2 ;;
+    esac
+    return 1
+  fi
+}
+
+# Creates the config (every default written out) and the schema beside it where missing,
+# as `trex setup` does. An existing config is never touched.
+create_files() {
+  mkdir -p "$config_dir" || die "couldn't write to $config_dir"
+  [ -f "$config_file" ] || cp "$TREX_DIR/lua/trex/config.default.json" "$config_file" || die "couldn't create $config_file"
+  cmp -s "$TREX_DIR/lua/trex/config.schema.json" "$config_dir/config.schema.json" ||
+    cp "$TREX_DIR/lua/trex/config.schema.json" "$config_dir/config.schema.json" || die "couldn't write the schema in $config_dir"
+}
+
+# Runs the user's editor on the config file. $VISUAL or $EDITOR may carry arguments ("code -w").
+run_editor() {
+  local editor=${VISUAL:-${EDITOR:-vi}}
+  sh -c "$editor"' "$1"' sh "$config_file"
+}
+
+edit_config() {
+  create_files
+  local answer
+  while :; do
+    run_editor || printf 'trex: the editor exited with an error; checking the file anyway.\n' >&2
+    if check_file >/dev/null 2>&1; then
+      printf 'trex: %s is valid.\n' "$config_file"
+      reload_server || printf 'trex: the file is saved, but the running Rex did not take it; `trex config reload` tries again.\n' >&2
+      return 0
+    fi
+    check_file >&2
+    while :; do
+      printf '(e)dit again / (k)eep anyway / (r)evert? ' >&2
+      if ! read -r answer; then
+        # No answer is coming (stdin closed): leave the file as it is.
+        printf '\ntrex: no answer; keeping the file as it is. The last good settings stay in effect.\n' >&2
+        return 1
+      fi
+      case "$answer" in
+        e | E | edit*) continue 2 ;;
+        k | K | keep*)
+          printf 'trex: keeping %s. The last good settings stay in effect until it is fixed.\n' "$config_file" >&2
+          reload_server || true # a blocking problem is refused; an unknown key still applies
+          return 1
+          ;;
+        r | R | revert*)
+          if [ -f "$last_good" ]; then
+            cp "$last_good" "$config_file" || die "couldn't restore $config_file"
+            printf 'trex: reverted %s to the last good file.\n' "$config_file" >&2
+          else
+            cp "$TREX_DIR/lua/trex/config.default.json" "$config_file" || die "couldn't restore $config_file"
+            printf 'trex: there is no last good file yet, so %s is back to the defaults.\n' "$config_file" >&2
+          fi
+          return 0
+          ;;
+      esac
+    done
+  done
+}
 
 cmd=${1:-}; [ $# -gt 0 ] && shift
 [ $# -eq 0 ] || { usage; exit 2; }
 
 case "$cmd" in
+  edit)
+    edit_config
+    ;;
   check)
-    "$REX" do "$TREX_DIR/lua/trex/config-check.lua" "config=$config_file"
+    check_file
     ;;
   reload)
-    # Test hook: TREX_RELOAD_DO replaces the action name (and any flags) after `rex do`,
-    # so tests can reach a throwaway session instead of the live server.
-    read -r -a target <<<"${TREX_RELOAD_DO:-trex_reload_config}"
-    if out=$("$REX" do "${target[@]}" 2>&1); then
-      # The action's result is JSON, compact or not; its "message" is a string on one line.
-      printf '%s\n' "$out" | sed -nE 's/.*"message": *"(([^"\\]|\\.)*)".*/\1/p' | sed 's/\\n/\
-/g; s/\\"/"/g'
-    else
-      # The server's own words: what is wrong, and what is kept. Or, when the server
-      # doesn't know the action, that trex isn't loaded there.
-      printf '%s\n' "$out" | sed 's/^Error: //' >&2
-      case "$out" in
-        *"trex_reload_config"*) printf 'trex: is trex installed in Rex? Run `bin/trex install`.\n' >&2 ;;
-      esac
-      exit 1
-    fi
+    reload_server || exit 1
     ;;
   *)
     usage
