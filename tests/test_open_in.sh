@@ -15,6 +15,25 @@ oi_window_of() { # BLOCK
 
 oi_window_count() { "$REX" window ls -s "$SESSION" -q | grep -c .; }
 
+oi_window_label() { # WINDOW
+  "$REX" session inspect "$SESSION" --json | jq -r --arg w "$1" '.windows[] | select(.window_id == $w) | .label'
+}
+
+oi_block_label() { # BLOCK
+  "$REX" block ls -s "$SESSION" --json | jq -r --arg b "$1" '.blocks[] | select(.block_id == $b) | .label'
+}
+
+# Waits up to 20 s for BLOCK's Rex label to become TITLE.
+oi_named() { # TITLE BLOCK
+  local title=$1 block=$2 i
+  for i in $(seq 1 80); do
+    [ "$(oi_block_label "$block")" = "$title" ] && return 0
+    sleep 0.25
+  done
+  fail "the pane was never labelled [$title] (it is [$(oi_block_label "$block")])"
+  return 1
+}
+
 # The window the user is looking at, and the focused block of WINDOW.
 oi_active_window() { "$REX" session inspect "$SESSION" --json | jq -r '.active_window_id'; }
 oi_focused_in() { # WINDOW
@@ -55,8 +74,9 @@ test_open_in_window_opens_a_new_focused_window() {
   [ "$window" != "$(oi_window_of "$ANCHOR")" ] || fail "the Browser Pane is in the pane's own window"
   assert_eq "$window" "$(oi_active_window)" "the new window is the one shown"
   assert_eq "$BROWSER" "$(oi_focused_in "$window")" "the Browser Pane has focus"
-  assert_eq "trex browser" "$("$REX" session inspect "$SESSION" --json | jq -r --arg w "$window" '.windows[] | select(.window_id == $w) | .label')" \
-    "the window is labelled"
+  assert_eq "Trex browser" "$(oi_window_label "$window")" "the tab is labelled"
+  oi_named "trex test page" "$BROWSER" || return
+  assert_eq "Trex browser" "$(oi_window_label "$window")" "the tab keeps its name once the page has a title"
   # trex asks the app that ran the action to show that window. (On Rex 2061 the app usually drops
   # it: see place_browser in init.lua.)
   assert_eq "session.select $SESSION $window" \
@@ -70,6 +90,22 @@ test_open_in_split_stays_in_the_window() {
   assert_eq "$windows" "$(oi_window_count)" "no new window"
   assert_eq "$(oi_window_of "$ANCHOR")" "$(oi_window_of "$BROWSER")" "same window as the pane it was opened from"
   [ ! -s "$TREX_CLIENT_LOG" ] || fail "a split asked the app to switch tabs: $(cat "$TREX_CLIENT_LOG")"
+  oi_named "trex test page" "$BROWSER" || return
+  assert_eq "Main" "$(oi_window_label "$(oi_window_of "$ANCHOR")")" "the existing window keeps its name"
+}
+
+# The Pane follows the page's title; once the user renames it, trex leaves the name alone.
+test_open_in_pane_follows_the_title_until_the_user_renames_it() {
+  oi_config split
+  oi_open "$ANCHOR" || return
+  oi_named "trex test page" "$BROWSER" || return
+  "$KB" ctl -i "$BROWSER_ID" eval 'document.title = "second title"' >/dev/null 2>&1
+  oi_named "second title" "$BROWSER" || return
+  "$REX" block rename -s "$SESSION" "$BROWSER" "my name" >/dev/null || { fail "couldn't rename the pane"; return; }
+  sleep 1.5 # title-watch looks once a second: let it see the rename
+  "$KB" ctl -i "$BROWSER_ID" eval 'document.title = "third title"' >/dev/null 2>&1
+  sleep 3
+  assert_eq "my name" "$(oi_block_label "$BROWSER")" "the user's name stays after the title changes"
 }
 
 test_open_in_window_devtools_opens_in_that_window_below() {

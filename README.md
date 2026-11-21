@@ -8,7 +8,7 @@ See `.scratch/trex/spec.md`, `GLOSSARY.md` and `docs/adr/`.
 
 - `lua/trex/init.lua`: the plugin. `setup(opts)` defines the Rex actions and key bindings. Its sibling modules load from the same directory, each
   as `loadfile(path)(the modules it needs)`.
-  - `util.lua`: small shared helpers (reading files, a DevTools endpoint's JSON, finding a block, the terminal flavor).
+  - `util.lua`: small shared helpers (reading files, a DevTools endpoint's JSON, clipping a Rex label, finding a block, the terminal flavor).
   - `pin.lua`: the pinned KittyBrowser repo and commit (the one place they live) and the check that it is the one installed.
   - `kb.lua`: running KittyBrowsers: `kb list`, what a kb shows (`kb ctl status`), its DevTools port, and the page target it shows.
   - `url.lua`: turns what the user typed into the address kb gets.
@@ -18,6 +18,7 @@ See `.scratch/trex/spec.md`, `GLOSSARY.md` and `docs/adr/`.
     hidden from `kb list`, turns DevTools' screencast off before the inspector loads, and runs `devtools-watch.lua` beside it.
   - `devtools-watch.lua`: a `rex do` script that watches one DevTools Pane: closes it with its Browser Pane, remembers its side whenever the layout
     changes, and points it at the window the Browser Pane's kb shows.
+  - `title-watch.lua`: a `rex do` script that names a Browser Pane after the page title once kb reports it, and keeps it in step as the page changes.
   - `f12.lua`: the F12 binding, and the notice it shows when something fails. Uses only `rex.bind`/`rex.session`/`rex.block.call`, so tests can load
     it as a client script.
   - `pick.lua`, `pick.js`, `pick-wait.sh`: Element Handoff's pick mode (`.scratch/element-handoff/`). `pick.lua` finds the Browser Pane and turns
@@ -79,7 +80,8 @@ changing trex's Lua.
 `bin/trex --help` lists every command; `bin/trex COMMAND --help` prints its options.
 
 - **Trex: Open Browser…** (`cmd+shift+b`): asks in the command palette and opens a Browser Pane, `kb --devtools URL`, to the right of the focused pane
-  (with `open_in` set to `"window"` in the config, in a new Rex window of the session, focused).
+  (with `open_in` set to `"window"` in the config, in a new Rex window of the session, focused). The new window is labelled "Trex browser". The pane is
+  labelled with the page's title once it loads (the URL until then), and follows it as you navigate.
   The list filters as you type. Its first row is the `default_url` setting (`http://localhost:3000` unless the config says otherwise), then up to 50 URLs
   from kb's history (`~/.kittybrowser/history`, read each time the prompt opens), ranked by visits and recency (visits x 4 when seen in the last 4 hours,
   x 2 in 24 hours, x 1 in 7 days, x 0.5 older). Enter on a row opens it. Enter on text that matches no row opens that text: a bare port such as `3000` or

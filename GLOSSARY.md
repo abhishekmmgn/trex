@@ -4,6 +4,22 @@ A Chromium browser that lives inside Rex panes, built for frontend development b
 
 ## Language
 
+### Rex
+
+**Session**:
+A named group of Tabs in Rex, listed as a heading in the sidebar.
+_Avoid_: workspace, project
+
+**Tab**:
+One entry under a Session in Rex's sidebar, holding one or more Panes. A Tab can be moved out into its own app window and is still a Tab.
+_Avoid_: window (what the `rex` CLI and API call it), browser tab
+
+**Pane**:
+One rectangle inside a Tab, with its own header and name, running one program.
+_Avoid_: block (what the `rex` CLI and API call it), split
+
+### trex
+
 **Browser Pane**:
 A Rex pane showing a live web page that the user can scroll, click and type into.
 _Avoid_: browser window, browser tab, webview

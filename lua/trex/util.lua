@@ -34,6 +34,15 @@ function M.get_json(url)
   return nil
 end
 
+-- A Rex window or block label: no control characters, at most 128 characters.
+-- Empty after trimming is nil.
+function M.clip_label(text)
+  text = tostring(text or ""):gsub("%c", " "):gsub("^%s+", ""):gsub("%s+$", ""):gsub(" +", " ")
+  if text == "" then return nil end
+  if #text > 128 then text = text:sub(1, 128) end
+  return text
+end
+
 -- The first entry of the session's blocks (rex.session.list_blocks) whose
 -- `field` is `value`; nil if none.
 function M.find_block(field, value)

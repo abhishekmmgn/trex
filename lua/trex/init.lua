@@ -52,6 +52,7 @@ function M.setup(opts)
   local pin = load("pin", util)
   local kb_module = load("kb", util)
   local kb = kb_module.new{ bin = kb_bin, home = home }
+  local rex_bin = opts.rex or find_rex(home)
   local url = load("url")
   local history = load("history")
   local history_path = opts.kb_history or (home .. "/.kittybrowser/history")
@@ -68,7 +69,7 @@ function M.setup(opts)
   local devtools = load("devtools", util, kb_module).new{
     kb = kb,
     script = DIR .. "/devtools-pane.sh",
-    rex = opts.rex or find_rex(home),
+    rex = rex_bin,
     state = load("state", util, state_path),
     state_path = state_path,
     config = config,
@@ -78,7 +79,8 @@ function M.setup(opts)
   -- focused pane's session, focused; "split" (or no focused pane) is right of the focused pane.
   local function place_browser(ctx, layout)
     if ctx.block_id == nil or config.get("open_in") == "window" then
-      local r, err = rex.session.new_window{ window_label = "trex browser", layout = layout, focus = true }
+      -- The Tab keeps this name; only the Browser Pane follows the page title (title-watch.lua).
+      local r, err = rex.session.new_window{ window_label = "Trex browser", layout = layout, focus = true }
       -- focus = true only makes it the session's active window on the server. Which tab an app
       -- shows is the app's own state, so ask the app that ran this action to go to it.
       -- On Rex 2061 this rarely works: the app usually gets the select before it hears of the new
@@ -99,17 +101,30 @@ function M.setup(opts)
     }
   end
 
+  -- After the page loads, names the Browser Pane after the document title, and
+  -- keeps it in step as the page changes. Config Lua can't wait, so a `rex do` script does.
+  local function watch_page_title(ctx, block_id, label)
+    if block_id == nil or ctx.session_id == nil then return end
+    local payload = { browser = block_id, label = label, kb = kb_bin, home = home }
+    rex.exec({ "/bin/sh", "-c", '"$0" "$@" </dev/null >/dev/null 2>&1 &',
+      rex_bin, "do", DIR .. "/title-watch.lua", "-s", ctx.session_id,
+      "--args", rex.json.encode(payload) }, { timeout = 3 })
+  end
+
   -- Opens a Browser Pane: kb --devtools URL, placed by place_browser.
   local function open_browser(ctx, address)
     local target, why = url.normalise(address, config.get("default_url"))
     if target == nil then error(why, 0) end
     pin.check(crates2, kb_bin)
 
-    local layout = { block = { flavor = util.SHELL, label = "trex browser",
+    -- Until the page has a title, the URL without scheme (as in the Open list).
+    local name = util.clip_label(history.title(target)) or "browser"
+    local layout = { block = { flavor = util.SHELL, label = name,
       options = { command = { kb_bin, "--devtools", target } } } }
     local r, err = place_browser(ctx, layout)
     if err ~= nil or r == nil then error("trex: couldn't open a pane: " .. tostring(err), 0) end
     local block_id = r.block_ids and r.block_ids[1]
+    watch_page_title(ctx, block_id, name)
     return { block_id = block_id, url = target }
   end
 
@@ -187,7 +202,7 @@ function M.setup(opts)
     js = DIR .. "/pick.js",
     waiter = DIR .. "/pick-wait.sh",
     clipboard = opts.clipboard or "/usr/bin/pbcopy",
-    rex = opts.rex or find_rex(home),
+    rex = rex_bin,
     stay_on = function() return config.get("pick.stay_on") end,
   }
 
