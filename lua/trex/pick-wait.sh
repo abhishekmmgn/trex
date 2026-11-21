@@ -17,6 +17,9 @@ kb=$1 id=$2 clipboard=$3
 
 # Never with a DevTools Pane's KB_SOCKET, which beats -i.
 unset KB_SOCKET KB_INSTANCE
+# Rex runs this with no locale, and pbcopy then reads its input as Mac Roman
+# (× arrives as √ó). The description is UTF-8.
+export LC_CTYPE=UTF-8
 
 ctl() { "$kb" ctl -i "$id" "$@"; }
 

@@ -15,7 +15,7 @@ pick_setup() {
   PICK_URL="${PAGE_URL}pick.html"
   CLIP_DIR=$(mktemp -d)
   CLIP=$CLIP_DIR/clipboard
-  printf '#!/bin/sh\ncat > "%s"\n' "$CLIP" >"$CLIP_DIR/copy"
+  printf '#!/bin/sh\nprintf %%s "$LC_CTYPE" > "%s.ctype"\ncat > "%s"\n' "$CLIP" "$CLIP" >"$CLIP_DIR/copy"
   chmod +x "$CLIP_DIR/copy"
   export TREX_CLIPBOARD=$CLIP_DIR/copy
 
@@ -86,6 +86,8 @@ test_pick_copies_the_description_and_the_page_hears_nothing() {
     'box: 112×32 at 94,131 (page px)' \
     'html: <button id="save" type="submit" class="btn primary">Save changes</button>')
   assert_eq "$expected" "$(cat "$CLIP")" "the description copied"
+  # pbcopy reads its input as Mac Roman without a UTF-8 locale (× became √ó).
+  assert_eq UTF-8 "$(cat "$CLIP.ctype")" "the clipboard command runs with a UTF-8 locale"
 
   sleep 1.2 # past the second in which the rest of the click is swallowed
   assert_eq '{"pointerdown":0,"mousedown":0,"pointerup":0,"mouseup":0,"click":0,"keydown":0,"focus":0}' \
