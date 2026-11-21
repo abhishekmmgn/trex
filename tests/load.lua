@@ -9,9 +9,14 @@
 --   TREX_CONFIG   trex's config file (tests/lib.sh gives each test its own, in a temp dir)
 --   TREX_CLIPBOARD the command Element Handoff copies with, so tests never
 --                 touch the user's clipboard
---   TREX_PROMPT   a file: when set, rex.ui.input never reaches a Rex app. It
---                 answers with the text TREX_PROMPT_ANSWER, and writes what it
---                 was asked (the rex.ui.input table, as JSON) to this file.
+--   TREX_KB_HISTORY kb's history file (tests that need one write their own fixture)
+--   TREX_PROMPT   a file: when set, rex.ui.input and rex.ui.pick never reach a Rex
+--                 app. They answer with TREX_PROMPT_ANSWER, and write what they were
+--                 asked (the table, as JSON, items included) to this file (rex.ui.pick:
+--                 to this file with ".pick" added). rex.ui.pick answers as
+--                 TREX_PROMPT_PICK says: "id" (the default: the answer is a row id),
+--                 "text" (typed text, as { text = … }), or the reason it returns
+--                 with no answer: "unsupported", "failed", "busy", "cancelled".
 
 local this_file = debug.getinfo(1, "S").source:gsub("^@", "")
 local root = this_file:match("^(.*)/tests/[^/]*$")
@@ -25,6 +30,8 @@ local state = os.getenv("TREX_STATE")
 if state ~= nil and state ~= "" then opts.state = state end
 local config = os.getenv("TREX_CONFIG")
 if config ~= nil and config ~= "" then opts.config = config end
+local kb_history = os.getenv("TREX_KB_HISTORY")
+if kb_history ~= nil and kb_history ~= "" then opts.kb_history = kb_history end
 local clipboard = os.getenv("TREX_CLIPBOARD")
 if clipboard ~= nil and clipboard ~= "" then opts.clipboard = clipboard end
 
@@ -36,9 +43,22 @@ if prompt_log ~= nil and prompt_log ~= "" then
     f:close()
     return os.getenv("TREX_PROMPT_ANSWER") or ""
   end
+  local function fake_pick(spec)
+    local f = assert(io.open(prompt_log .. ".pick", "w"))
+    f:write(rex.json.encode(spec))
+    f:close()
+    local answer = os.getenv("TREX_PROMPT_ANSWER") or ""
+    local as = os.getenv("TREX_PROMPT_PICK") or "id"
+    if as == "id" then return answer end
+    if as == "text" then return { text = answer } end
+    return nil, as
+  end
   rex.ui.input = fake_input
-  -- If Rex didn't take the stand-in, stop here rather than prompt the user's app.
-  if rex.ui.input ~= fake_input then error("tests/load.lua: couldn't replace rex.ui.input", 0) end
+  rex.ui.pick = fake_pick
+  -- If Rex didn't take the stand-ins, stop here rather than prompt the user's app.
+  if rex.ui.input ~= fake_input or rex.ui.pick ~= fake_pick then
+    error("tests/load.lua: couldn't replace rex.ui.input and rex.ui.pick", 0)
+  end
 end
 
 dofile(root .. "/lua/trex/init.lua").setup(opts)

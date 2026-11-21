@@ -10,14 +10,13 @@
 --   rex      path of the rex CLI (default: the one Rex's server runs from)
 --   state    trex's state file (default ~/.local/state/trex/state.json)
 --   clipboard a command that copies its stdin, for Element Handoff (default /usr/bin/pbcopy)
+--   kb_history kb's history file, which Open Browser… suggests from (default ~/.kittybrowser/history)
 --   config   trex's config file (default $XDG_CONFIG_HOME/trex/config.json, else ~/.config/trex/config.json)
 --
 -- Config Lua runs in the Rex server: its PATH is only /usr/bin:/bin, and it has
 -- no rex.sleep or rex.on. Use absolute paths and keep actions short.
 
 local M = {}
-
-local DEFAULT_URL = "http://localhost:3000"
 
 -- The directory this file is in, so its sibling modules load from the same checkout.
 local DIR = debug.getinfo(1, "S").source:gsub("^@", ""):match("^(.*)/[^/]*$")
@@ -53,6 +52,8 @@ function M.setup(opts)
   local kb_module = load("kb", util)
   local kb = kb_module.new{ bin = kb_bin, home = home }
   local url = load("url")
+  local history = load("history")
+  local history_path = opts.kb_history or (home .. "/.kittybrowser/history")
   local state_path = opts.state or ((os.getenv("XDG_STATE_HOME") or (home .. "/.local/state")) .. "/trex/state.json")
   local config_path = opts.config or ((os.getenv("XDG_CONFIG_HOME") or (home .. "/.config")) .. "/trex/config.json")
   -- The settings, read now and again by Trex: Reload Config. Other modules read one with
@@ -73,7 +74,7 @@ function M.setup(opts)
 
   -- Opens a Browser Pane: kb --devtools URL in a split right of the focused pane.
   local function open_browser(ctx, address)
-    local target, why = url.normalise(address, DEFAULT_URL)
+    local target, why = url.normalise(address, config.get("default_url"))
     if target == nil then error(why, 0) end
     pin.check(crates2, kb_bin)
 
@@ -96,6 +97,33 @@ function M.setup(opts)
     return { block_id = block_id, url = target }
   end
 
+  -- What the user chose or typed in the palette; or nil when they didn't answer. A row
+  -- answers with its id (the URL), typed text that matches no row with { text = … }.
+  -- rex.ui.pick works only in an action defined in the server's init.lua, so where it
+  -- is unsupported or fails, a plain text prompt asks instead.
+  local function ask_address()
+    local pick = type(rex.ui) == "table" and rex.ui.pick
+    if type(pick) == "function" then
+      local answer, reason = pick{
+        title = "Open in a Browser Pane",
+        placeholder = "URL or port, e.g. localhost:3000",
+        items = history.rows(util, history_path, config.get("default_url"), 50, os.time()),
+        allow_other = true,
+      }
+      if type(answer) == "table" then return answer.text or "" end
+      if answer ~= nil then return answer end
+      if reason == "busy" then
+        error("trex: Rex is already asking something else. Answer or close that, then try again.", 0)
+      end
+      if reason ~= "unsupported" and reason ~= "failed" then return nil end -- cancelled, or timed out
+    end
+    return rex.ui.input{
+      title = "Open in a Browser Pane",
+      placeholder = "URL or port, e.g. localhost:3000",
+      confirm = "Open",
+    }
+  end
+
   rex.action{
     name = "trex_open",
     title = "Trex: Open Browser…",
@@ -107,13 +135,8 @@ function M.setup(opts)
     run = function(ctx, args)
       local address = args.url
       if address == nil then
-        -- The field starts empty, with the default only as a hint; an empty
-        -- answer opens DEFAULT_URL.
-        local answer = rex.ui.input{
-          title = "Open in a Browser Pane",
-          placeholder = "URL or port, e.g. localhost:3000",
-          confirm = "Open",
-        }
+        -- An empty answer opens the default_url setting.
+        local answer = ask_address()
         if answer == nil then return nil end -- cancelled, timed out, or no app to ask
         address = answer
       end
