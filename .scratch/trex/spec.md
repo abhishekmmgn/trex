@@ -47,7 +47,7 @@ See `GLOSSARY.md` for the terms (Browser Pane, DevTools Pane, Agent Pane, Elemen
 
 ## Phase 2: Element Handoff (only once Phase 1 feels right)
 
-A pick mode, separate from the DevTools inspector. It sends a Cursor-style description of the picked element to the Agent Pane as unsent text, and also copies it to the clipboard. The description has the DOM path, position and opening HTML, plus the React component and source `file:line` when available (react-grab style). It is injected into the page over CDP, not built into a fork. It gets its own spec when we get there.
+A pick mode, separate from the DevTools inspector. It sends a Cursor-style description of the picked element to the Agent Pane as unsent text, and also copies it to the clipboard. The description has the DOM path, position and opening HTML, plus the React component and source `file:line` when available (react-grab style). It is injected into the page over CDP, not built into a fork. Spec: `.scratch/element-handoff/spec.md`.
 
 ## Out of scope
 
