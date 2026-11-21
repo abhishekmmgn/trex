@@ -1,12 +1,8 @@
 #!/bin/bash
 # trex's installer: adds or removes the marked trex block in Rex's config.
 #
-#   bin/trex install   [--config PATH] [--repo DIR]   add or update the block
-#   bin/trex uninstall [--config PATH]                remove it
-#   bin/trex setup     [--dry-run] [--yes]            install everything trex needs (see bin/trex-setup)
-#   bin/trex block     [--repo DIR]                   print the block
-#   bin/trex config check | reload                    check / reload trex's config file (see bin/trex-config)
-#   bin/trex browser | ctl CMD | mcp                  for agents: reach the Browser Pane beside this pane (see bin/trex-agent)
+#   Run `bin/trex --help` for the commands and `bin/trex COMMAND --help` for one command's options. Their texts are
+#   overview() and the help_* functions below; bin/trex-setup, bin/trex-config and bin/trex-agent carry their own.
 #
 # --config  the Rex config to edit. Default: $REX_CONFIG, else
 #           $XDG_CONFIG_HOME/rex/init.lua, else ~/.config/rex/init.lua.
@@ -31,6 +27,72 @@ while [ -L "$self" ]; do
 done
 bin=$(cd "$(dirname "$self")" && pwd)
 
+overview() {
+  cat <<'EOF'
+usage: trex COMMAND [OPTIONS]      (trex COMMAND --help for a command's options)
+
+  install            add or update the trex block in the Rex config
+  uninstall          remove the trex block from the Rex config
+  block              print the trex block
+  setup              install everything trex needs: cargo, Chrome, the pinned kb, trex's config, the block
+  config edit        edit trex's config file; it is checked when the editor exits
+  config check       check the config file and print each problem
+  config reload      make the running Rex use the config file now
+  browser            for agents: print the kb id of the Browser Pane beside this pane
+  ctl COMMAND        for agents: run a kb ctl command on the Browser Pane beside this pane
+  mcp                for agents: kb's MCP server, aimed at the Browser Pane beside this pane
+  help               print this text
+EOF
+}
+
+help_install() {
+  cat <<'EOF'
+usage: trex install [--config PATH] [--repo DIR]
+
+Add the trex block to the Rex config, or update it. The file is checked with
+`rex config check` and put back if the check fails. Only the live config is
+reloaded. Run it again after changing anything under lua/trex/.
+
+  --config PATH  the Rex config to edit (default: $REX_CONFIG, else
+                 $XDG_CONFIG_HOME/rex/init.lua, else ~/.config/rex/init.lua)
+  --repo DIR     the trex checkout the block loads its Lua from (default: this
+                 repository's main checkout)
+  -h, --help     print this text
+EOF
+}
+
+help_uninstall() {
+  cat <<'EOF'
+usage: trex uninstall [--config PATH]
+
+Remove the trex block from the Rex config.
+
+  --config PATH  the Rex config to edit (default: as for `trex install`)
+  -h, --help     print this text
+EOF
+}
+
+help_block() {
+  cat <<'EOF'
+usage: trex block [--repo DIR]
+
+Print the trex block, without touching any file.
+
+  --repo DIR     the trex checkout the block loads its Lua from (default: this
+                 repository's main checkout)
+  -h, --help     print this text
+EOF
+}
+
+case "${1:-}" in
+  --help | -h) overview; exit 0 ;;
+  help)
+    case "${2:-}" in
+      "") overview; exit 0 ;;
+      install | uninstall | block | setup | config | browser | ctl | mcp) exec "$0" "$2" --help ;;
+      *) printf 'trex: no command %s\n\n' "$2" >&2; overview >&2; exit 2 ;;
+    esac ;;
+esac
 [ "${1:-}" = setup ] && { shift; exec "$bin/trex-setup" "$@"; }
 [ "${1:-}" = config ] && { shift; exec "$bin/trex-config" "$@"; }
 case "${1:-}" in browser | ctl | mcp) exec "$bin/trex-agent" "$@" ;; esac
@@ -110,10 +172,16 @@ write_checked() { # CONFIG CONTENT_FILE
 }
 
 cmd=${1:-}; [ $# -gt 0 ] && shift
+case "$cmd" in
+  install | uninstall | block) ;;
+  "") overview >&2; exit 2 ;;
+  *) printf 'trex: no command %s\n\n' "$cmd" >&2; overview >&2; exit 2 ;;
+esac
 config=$(live_config)
 repo=
 while [ $# -gt 0 ]; do
   case "$1" in
+    --help | -h) "help_$cmd"; exit 0 ;;
     --config) config=$2; shift 2 ;;
     --repo) repo=$(cd "$2" 2>/dev/null && pwd || printf '%s' "$2"); shift 2 ;;
     *) die "unknown option $1" ;;
@@ -152,9 +220,5 @@ case "$cmd" in
     if [ "$status" = 3 ]; then printf 'trex: no trex block in %s.\n' "$config"; exit 0; fi
     [ "$status" = 0 ] || die "couldn't read $config"
     write_checked "$config" "$tmp/new"
-    ;;
-  *)
-    sed -n '2,9p' "$self" | sed 's/^# \{0,1\}//' >&2
-    exit 2
     ;;
 esac

@@ -29,7 +29,7 @@ See `.scratch/trex/spec.md`, `GLOSSARY.md` and `docs/adr/`.
     holds: `config.get("devtools.side")`. `config-check.lua` is the `rex do` script behind `trex config check`. `config.default.json` is the
     file `trex setup` writes.
 - `bin/trex`: adds or removes the marked block in Rex's config. `bin/trex browser|ctl|mcp` (`bin/trex-agent`) are for agents, see Agents.
-  `bin/trex config` is `bin/trex-config`. `bin/trex setup` is `bin/trex-setup`. `bin/trex-lib.sh` holds the shell helpers they and the tests share.
+  `bin/trex config` is `bin/trex-config`. `bin/trex setup` is `bin/trex-setup`. `bin/trex-lib.sh` holds the shell helpers they and the tests share. Each script holds its own help text (`usage()` / `help_*`), which `--help` prints; `tests/test_help.sh` checks them.
 - `tests/`: the `rex do` harness and the tests.
 
 ## Install
@@ -37,6 +37,7 @@ See `.scratch/trex/spec.md`, `GLOSSARY.md` and `docs/adr/`.
 One command does everything (Rex must already be installed; trex only reports it if missing):
 
 ```sh
+bin/trex --help               # every command; `bin/trex COMMAND --help` gives its options
 bin/trex setup              # cargo, Google Chrome, the pinned KittyBrowser, trex's config file, then the trex block
 bin/trex setup --dry-run    # print what it would do, change nothing
 bin/trex setup --yes        # also replace a kb at another commit, from another repo (or a local build) without asking
@@ -71,6 +72,8 @@ The block holds a hash of `lua/trex/*.lua`. The Rex app refetches palette action
 changing trex's Lua.
 
 ## Use
+
+`bin/trex --help` lists every command; `bin/trex COMMAND --help` prints its options.
 
 - **Trex: Open Browser…** (`cmd+shift+b`): asks in the command palette and opens a Browser Pane, `kb --devtools URL`, to the right of the focused pane
   (with `open_in` set to `"window"` in the config, in a new Rex window of the session, focused).
@@ -164,7 +167,7 @@ config, and it refreshes the schema. A missing file means all defaults, and a mi
 
 ## Agents
 
-A coding agent in an Agent Pane drives the Browser Pane beside it through `bin/trex` (logic in `bin/trex-agent`). Don't let it run plain `kb ctl`
+A coding agent in an Agent Pane drives the Browser Pane beside it through `bin/trex` (logic in `bin/trex-agent`). `trex --help` lists the commands, and `trex browser|ctl|mcp --help` describes each (`trex ctl eval --help` is kb's own help for eval). Don't let it run plain `kb ctl`
 or a plain `kb mcp serve`: without `-i` they reach the lowest-numbered kb, which is often your own kb in some other session.
 
 ```sh

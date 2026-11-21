@@ -19,6 +19,28 @@
 set -u
 
 . "$(dirname "$0")/trex-lib.sh"
+
+usage() {
+  cat <<'EOF'
+usage: trex setup [--dry-run] [--yes] [--config PATH] [--repo DIR]
+
+Take a Mac with Rex on it to a working trex: cargo, Google Chrome, the pinned
+KittyBrowser, trex's config file and schema, then the trex block in the Rex
+config. What is there is left alone, so it can be run again safely.
+
+  --dry-run      print what would be done; change nothing
+  --yes, -y      replace a KittyBrowser at another commit or from another repo
+                 without asking
+  --config PATH  the Rex config to edit (as for `trex install`)
+  --repo DIR     the trex checkout the block loads its Lua from (as for `trex install`)
+  -h, --help     print this text
+EOF
+}
+# Before anything else runs: help must not start installing.
+for arg in "$@"; do
+  case "$arg" in --help | -h) usage; exit 0 ;; esac
+done
+
 APP_DIRS=${TREX_APPLICATIONS:-/Applications:$HOME/Applications}
 CARGO_HOME_DIR=${CARGO_HOME:-$HOME/.cargo}
 

@@ -3,11 +3,9 @@
 # Pane beside it, never a DevTools Pane's kb or a kb somewhere else (the user's).
 # Run as `bin/trex browser|ctl|mcp`.
 #
-#   trex browser             print the kb id of the Browser Pane beside this pane
-#   trex ctl COMMAND [ARGS]  `kb ctl -i <that id> COMMAND ARGS`
-#   trex ctl -i ID COMMAND   `kb ctl -i ID COMMAND`, to pick one yourself
-#   trex mcp                 kb's MCP server (`kb mcp serve`), with each tool
-#                            call sent to the Browser Pane beside this pane
+# What each command does is in its help_* function below (`trex browser --help` and so on).
+# That is handled before anything contacts kb. For ctl, only a --help directly after
+# `ctl` is trex's, so `trex ctl eval --help` still reaches kb.
 #
 # "Beside this pane" means a kb in `kb list` whose pane is a block in this Rex
 # session ($REX_SESSION), preferring this pane's own window ($REX_BLOCK). With
@@ -22,6 +20,44 @@
 set -u
 
 . "$(dirname "$0")/trex-lib.sh"
+
+help_browser() {
+  cat <<'EOF'
+usage: trex browser
+
+Print the kb id of the Browser Pane beside this pane (in the same Rex window,
+else the only one in the same Rex session). Fails, saying why, with none or
+with more than one.
+  -h, --help     print this text
+EOF
+}
+
+help_ctl() {
+  cat <<'EOF'
+usage: trex ctl COMMAND [ARGS]
+       trex ctl -i ID COMMAND [ARGS]
+
+Run `kb ctl -i <id> COMMAND ARGS` on the Browser Pane beside this pane. Any
+`kb ctl` command works (status, check, eval, screenshot --out FILE, ...), and
+`trex ctl COMMAND --help` is kb's own help for COMMAND. With -i ID (or
+--instance), it is `kb ctl -i ID COMMAND`, to pick a kb yourself (ids come
+from `kb list`).
+  -h, --help     print this text (only directly after `ctl`)
+EOF
+}
+
+help_mcp() {
+  cat <<'EOF'
+usage: trex mcp
+
+kb's MCP server (`kb mcp serve`) on stdin and stdout, with each tool call sent
+to the Browser Pane beside this pane at the time of the call. Register it with
+`claude mcp add kb -- /path/to/trex mcp`. Needs jq.
+  -h, --help     print this text
+EOF
+}
+
+usage() { echo 'usage: trex browser | trex ctl COMMAND [ARGS] | trex mcp    (each takes --help)'; }
 KB=${KB:-$HOME/.cargo/bin/kb}
 
 # KB_SOCKET would beat -i and KB_INSTANCE in kb, and send everything to one socket.
@@ -78,6 +114,11 @@ mcp() {
 }
 
 cmd=${1:-}; [ $# -gt 0 ] && shift
+# Before anything else runs: help must not contact kb.
+case "$cmd" in
+  browser | ctl | mcp) case "${1:-}" in --help | -h) "help_$cmd"; exit 0 ;; esac ;;
+  --help | -h) usage; exit 0 ;;
+esac
 case "$cmd" in
   browser)
     resolve ;;
@@ -90,6 +131,6 @@ case "$cmd" in
   mcp)
     mcp ;;
   *)
-    sed -n '5,10p' "$0" | sed 's/^# \{0,1\}//' >&2
+    usage >&2
     exit 2 ;;
 esac
