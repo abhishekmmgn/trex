@@ -79,7 +79,7 @@ changing trex's Lua.
 
 `bin/trex --help` lists every command; `bin/trex COMMAND --help` prints its options.
 
-- **Trex: Open Browser…** (`cmd+shift+b`): asks in the command palette and opens a Browser Pane with quality-95 JPEG frames and smooth slow scrolling, to the right of the focused pane
+- **Trex: Open Browser…** (`cmd+shift+b`): asks in the command palette and opens a Browser Pane with quality-95 JPEG frames and direct wheel input, to the right of the focused pane
   (with `open_in` set to `"window"` in the config, in a new Rex window of the session, focused). The new window is labelled "Trex browser". The pane is
   labelled with the page's title once it loads (the URL until then), and follows it as you navigate.
   The list filters as you type. Its first row is the `default_url` setting (`http://localhost:3000` unless the config says otherwise), then up to 50 URLs
