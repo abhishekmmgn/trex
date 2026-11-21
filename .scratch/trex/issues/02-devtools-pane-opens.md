@@ -4,7 +4,7 @@
 
 **Blocked by:** 01
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [x] F12 in a Browser Pane opens a DevTools Pane below it, for that pane's page
 - [x] DevTools' screencast preview is off from the first paint, or at most after one automatic reload

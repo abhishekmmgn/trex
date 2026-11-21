@@ -4,7 +4,7 @@
 
 **Blocked by:** 01
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [x] `bin/trex setup` checks each requirement in order and prints, for each, whether it was already present, has been installed, or failed and why
 - [x] Present and correct requirements are left untouched; running it twice in a row changes nothing the second time

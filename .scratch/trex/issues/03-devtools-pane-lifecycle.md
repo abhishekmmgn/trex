@@ -4,7 +4,7 @@
 
 **Blocked by:** 02
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [x] F12 toggles the DevTools Pane closed from either pane
 - [x] F12 in a shell, editor or other non-Browser Pane reaches that program as if trex weren't installed

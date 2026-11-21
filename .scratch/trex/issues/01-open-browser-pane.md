@@ -4,7 +4,7 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [x] "Trex: Open Browser…" appears in the Rex command palette, and `cmd+shift+b` runs it
 - [x] Without an argument it prompts for a URL in an empty field (hint `URL or port, e.g. localhost:3000`); an empty answer opens `http://localhost:3000`; with a `url` argument it opens without prompting

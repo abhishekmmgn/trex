@@ -15,7 +15,7 @@ Things already known (see ticket 05 and ticket 06's Comments):
 
 **Blocked by:** None
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [x] The cause of the sideways shift is found and shown with evidence: the wheel reports the terminal sends during a vertical or diagonal trackpad swipe, and what kb sends to Chrome for them
 - [x] The cause of the slow, unsmooth scrolling is measured: input rate, kb's merging of reports, Chrome's frame time and the frame pipeline, with the bottleneck named

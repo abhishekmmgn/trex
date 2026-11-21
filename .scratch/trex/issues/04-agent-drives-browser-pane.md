@@ -4,7 +4,7 @@
 
 **Blocked by:** 02
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [x] `kb ctl check` from the Agent Pane reports on the Browser Pane's page while a DevTools Pane is open
 - [x] The behaviour holds with more than one Browser Pane open, or how to target one is documented
