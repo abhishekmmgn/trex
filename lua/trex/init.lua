@@ -242,6 +242,27 @@ function M.setup(opts)
       return { message = message, settings = config.all() }
     end,
   }
+
+  -- The settings in effect, as the text of `trex config show`. Read-only: it never
+  -- reloads, so what the server holds stays as it is. `blocking` is whether the file has
+  -- problems right now (the held settings are then the last good ones).
+  rex.action{
+    name = "trex_config_show",
+    title = "Trex: Show Config",
+    description = "List trex's settings: each one's value in effect, its allowed values and what it does.",
+    category = "Trex",
+    keywords = "trex config configuration settings show list values options",
+    run = function()
+      local held = config.all()
+      local file = util.read(config_path)
+      local inspected = file ~= nil and config_module.inspect(file) or nil
+      return {
+        text = config_module.report(config_path, held),
+        settings = held,
+        blocking = inspected ~= nil and inspected.blocking or false,
+      }
+    end,
+  }
 end
 
 return M

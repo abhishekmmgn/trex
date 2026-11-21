@@ -2,6 +2,7 @@
 # `bin/trex config`: trex's settings file, $XDG_CONFIG_HOME/trex/config.json (default
 # ~/.config/trex/config.json). Modeled on `rex config check` and `rex config reload`.
 #
+#   bin/trex config [show]    list the settings: each one's value in effect, allowed values, what it does
 #   bin/trex config edit      open the file in $VISUAL, else $EDITOR, else vi; check it when the editor exits
 #   bin/trex config check     check the file; print each problem with its key and line. Exits 1 if any
 #   bin/trex config reload    make the running Rex server use the file now (Trex: Reload Config)
@@ -11,6 +12,9 @@
 # edit asks (e)dit again / (k)eep anyway / (r)evert, reading the answer from stdin. Revert
 # restores the last good file the server saved beside state.json (the defaults if there is
 # none). Keep leaves the file, and the last good settings stay in effect.
+# show asks the server (the read-only trex_config_show action) for the settings in effect and
+# prints them as rows (lua/trex/config.lua renders them, from the schema). With no server
+# to ask it runs lua/trex/config-show.lua with `rex do` and shows the file's values, saying so.
 # check runs lua/trex/config-check.lua with `rex do`, the same code the server checks
 # with. reload runs the server's trex_reload_config action, so the server has to be
 # running trex (`bin/trex install`). An invalid file is refused and the last good
@@ -22,13 +26,17 @@ set -u
 
 usage() {
   cat <<'EOF'
-usage: trex config edit      edit the config file; it is checked when the editor exits
+usage: trex config [show]    list the settings, their values and allowed values (the default)
+       trex config edit      edit the config file; it is checked when the editor exits
        trex config check     check the config file; print each problem with its key and line
        trex config reload    make the running Rex use the config file now
 
 The file is $XDG_CONFIG_HOME/trex/config.json (default ~/.config/trex/config.json).
   -h, --help                 print this text
+
+Settings (key, default, allowed values, what it does; `trex config show` has the values in effect):
 EOF
+  "$REX" do "$TREX_DIR/lua/trex/config-show.lua" help=1 2>/dev/null
 }
 # Before anything else runs: help must not open an editor.
 for arg in "$@"; do
@@ -40,6 +48,21 @@ config_file="$config_dir/config.json"
 # The last good copy the server saves beside state.json (tests point TREX_STATE at their own).
 state_file="${TREX_STATE:-${XDG_STATE_HOME:-$HOME/.local/state}/trex/state.json}"
 last_good="$(dirname "$state_file")/last-good-config.json"
+
+# Test hook: TREX_SHOW_DO replaces the action name after `rex do`, as TREX_RELOAD_DO does.
+# The server's answer is JSON; its "text" is the whole listing, on one line.
+show_config() {
+  local out target text
+  read -r -a target <<<"${TREX_SHOW_DO:-trex_config_show}"
+  if out=$("$REX" do "${target[@]}" 2>/dev/null) &&
+     text=$(printf '%s\n' "$out" | sed -nE 's/.*"text": *"(([^"\\]|\\.)*)".*/\1/p') && [ -n "$text" ]; then
+    printf '%s\n' "$text" | sed 's/\\n/\
+/g; s/\\"/"/g; s/\\\//\//g; s/\\\\/\\/g'
+  else
+    # No server to ask (or trex isn't loaded in it): the file's own values, and the script says so.
+    "$REX" do "$TREX_DIR/lua/trex/config-show.lua" "config=$config_file"
+  fi
+}
 
 check_file() {
   "$REX" do "$TREX_DIR/lua/trex/config-check.lua" "config=$config_file"
@@ -120,10 +143,13 @@ edit_config() {
   done
 }
 
-cmd=${1:-}; [ $# -gt 0 ] && shift
+cmd=${1:-show}; [ $# -gt 0 ] && shift
 [ $# -eq 0 ] || { usage >&2; exit 2; }
 
 case "$cmd" in
+  show)
+    show_config
+    ;;
   edit)
     edit_config
     ;;

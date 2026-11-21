@@ -6,7 +6,8 @@
 #
 # Checks, in order: Rex (reported, never installed), cargo, Google Chrome, the
 # pinned KittyBrowser (ADR-0001, ADR-0002), then trex's config file and schema
-# (ADR-0003), then the trex block in the Rex config (`bin/trex install`). Each line says "ok" (already there), "installed",
+# (ADR-0003), then the trex block in the Rex config (`bin/trex install`), then ~/.local/bin/trex linked to this
+# repository's main checkout. Each line says "ok" (already there), "installed",
 # "would" (--dry-run), "skipped" or "FAILED". Exits 1 if anything failed,
 # including a kb at another commit or from another repo left in place.
 #
@@ -14,7 +15,8 @@
 # --yes      replace a KittyBrowser at another commit or from another repo without asking
 #
 # The pinned repo and commit are read from lua/trex/pin.lua, the one place they live.
-# Test hook: TREX_APPLICATIONS (colon-separated dirs searched for Google Chrome.app).
+# Test hooks: TREX_APPLICATIONS (colon-separated dirs searched for Google Chrome.app), TREX_BIN_DIR (where the
+# trex link goes, default ~/.local/bin).
 
 set -u
 
@@ -26,7 +28,8 @@ usage: trex setup [--dry-run] [--yes] [--config PATH] [--repo DIR]
 
 Take a Mac with Rex on it to a working trex: cargo, Google Chrome, the pinned
 KittyBrowser, trex's config file and schema, then the trex block in the Rex
-config. What is there is left alone, so it can be run again safely.
+config, then link ~/.local/bin/trex to the main checkout's bin/trex (a different file or
+link already there is left alone). What is there is left alone, so it can be run again safely.
 
   --dry-run      print what would be done; change nothing
   --yes, -y      replace a KittyBrowser at another commit or from another repo
@@ -48,12 +51,13 @@ KB_REPO=$(pinned_kb REPO)
 KB_PIN=$(pinned_kb PIN)
 [ -n "$KB_REPO" ] && [ -n "$KB_PIN" ] || die "setup can't read the pinned kb commit from lua/trex/pin.lua"
 
-dry=0; yes=0; passthru=()
+dry=0; yes=0; passthru=(); repo=
 while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run) dry=1; shift ;;
     --yes|-y) yes=1; shift ;;
-    --config|--repo) passthru+=("$1" "$2"); shift 2 ;;
+    --config|--repo) [ $# -ge 2 ] || { printf 'trex setup: %s needs a value\n' "$1" >&2; exit 2; }
+      [ "$1" = --repo ] && repo=$2; passthru+=("$1" "$2"); shift 2 ;;
     *) printf 'trex setup: unknown option %s\n' "$1" >&2; exit 2 ;;
   esac
 done
@@ -206,5 +210,29 @@ elif out=$("$TREX_DIR/bin/trex" install ${passthru[@]+"${passthru[@]}"} 2>&1); t
 else
   fail "trex block" "$out"
 fi
+
+# --- trex on PATH ---------------------------------------------------------------
+# ~/.local/bin/trex -> the main checkout's bin/trex, so `trex` is a command (agents run
+# it too). A link that is already right is ok. Anything else already there, another
+# link or a file, is the user's: skipped, not a failure. Shell files are never edited.
+bin_dir=${TREX_BIN_DIR:-$HOME/.local/bin}
+link="$bin_dir/trex"
+if [ -n "$repo" ]; then repo=$(cd "$repo" 2>/dev/null && pwd || printf '%s' "$repo"); else repo=$(main_checkout); fi
+target="$repo/bin/trex"
+if [ -L "$link" ] && [ "$(readlink "$link")" = "$target" ]; then
+  ok "trex link" "$link -> $target"
+elif [ -e "$link" ] || [ -L "$link" ]; then
+  say "trex link: skipped" "$link is already there and isn't a link to $target; left alone"
+elif [ "$dry" = 1 ]; then
+  would "trex link" "link $link to $target"
+elif mkdir -p "$bin_dir" && ln -s "$target" "$link"; then
+  say "trex link: installed" "$link -> $target"
+else
+  fail "trex link" "couldn't link $link to $target"
+fi
+case ":$PATH:" in
+  *":$bin_dir:"*) ;;
+  *) printf '  %s is not on your PATH, so `trex` is not a command yet. Add this line to your shell profile (setup edits no shell files):\n    export PATH="%s:$PATH"\n' "$bin_dir" "$bin_dir" ;;
+esac
 
 exit "$failed"

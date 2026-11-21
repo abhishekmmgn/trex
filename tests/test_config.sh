@@ -158,9 +158,9 @@ test_config_get_reads_one_setting_and_refuses_an_unknown_name() {
   assert_contains "$(printf '%s' "$CFG_OUT" | jq -r '.get')" "there is no setting devtools.sid" "a typo is an error, not nil"
 }
 
-test_config_command_without_a_subcommand_prints_usage() {
+test_config_command_with_an_unknown_subcommand_prints_usage() {
   local out status
-  out=$("$TREX_ROOT/bin/trex" config 2>&1); status=$?
+  out=$("$TREX_ROOT/bin/trex" config frobnicate 2>&1); status=$?
   assert_eq "2" "$status" "exits 2"
   assert_contains "$out" "trex config check" "lists check"
   assert_contains "$out" "trex config reload" "lists reload"
@@ -318,4 +318,124 @@ test_config_edit_action_opens_a_split_beside_the_focused_pane() {
   BLOCKS_SEEN+=("$new")
   after=$(block_ids | wc -l | tr -d ' ')
   assert_eq "$((before + 1))" "$after" "one more pane"
+}
+
+# --- trex config show ------------------------------------------------------------------
+
+# `trex config ARGS` asking this test's throwaway session, with the test's config;
+# sets $SHOW_OUT and $SHOW_STATUS. SHOW_DO=none means there is no server to ask.
+show_flow() { # [ARGS...]
+  local do_target="$TREX_ROOT/tests/load.lua --action trex_config_show -s $SESSION -b $ANCHOR"
+  [ "${SHOW_DO:-}" = none ] && do_target=no_such_action
+  SHOW_OUT=$(XDG_CONFIG_HOME=$(CFG_XDG) TREX_SHOW_DO="$do_target" "$TREX_ROOT/bin/trex" config "$@" 2>&1)
+  SHOW_STATUS=$?
+}
+
+# The line of $SHOW_OUT that is about setting KEY.
+show_row() { printf '%s\n' "$SHOW_OUT" | grep -E "^[* ] $1 "; }
+
+test_config_show_lists_every_setting_with_values_allowed_values_and_summary() {
+  show_flow show
+  assert_eq "0" "$SHOW_STATUS" "exit"
+  assert_eq "$TREX_CONFIG" "$(printf '%s\n' "$SHOW_OUT" | head -n1)" "the first line is the config path"
+  local key
+  for key in default_url devtools.side open_in pick.stay_on; do
+    assert_eq "1" "$(show_row "$key" | wc -l | tr -d ' ')" "one row for $key"
+  done
+  assert_contains "$(show_row devtools.side)" "below" "the value"
+  assert_contains "$(show_row devtools.side)" "(below | above | right | left)" "the allowed values"
+  assert_contains "$(show_row pick.stay_on)" "(true | false)" "booleans allow true and false"
+  assert_contains "$(show_row open_in)" "where a Browser Pane opens" "the summary, from the schema"
+  assert_eq "0" "$(show_row default_url | grep -c '(')" "a free-text setting lists no allowed values"
+  assert_eq "0" "$(printf '%s\n' "$SHOW_OUT" | grep -c '^\*')" "no row is marked"
+  assert_contains "$SHOW_OUT" 'Edit with `trex config edit`.' "the footer"
+  assert_eq "0" "$(printf '%s\n' "$SHOW_OUT" | awk 'length > 120' | wc -l | tr -d ' ')" "no line is over 120 columns"
+}
+
+test_config_show_marks_a_value_changed_from_the_default() {
+  write_config '{ "devtools": { "side": "right" }, "default_url": "http://localhost:3000" }'
+  show_flow show
+  assert_eq "0" "$SHOW_STATUS" "exit"
+  assert_contains "$(show_row devtools.side)" "right" "the value in effect"
+  assert_contains "$(printf '%s\n' "$SHOW_OUT" | grep '^\* devtools.side')" "default below" "the changed row says the default"
+  assert_eq "1" "$(printf '%s\n' "$SHOW_OUT" | grep -cE '^\* [a-z_.]+  ')" "only the changed row is marked"
+  assert_contains "$SHOW_OUT" '* changed from the default. Edit with `trex config edit`.' "the footer says what * means"
+  # Columns line up: every row's allowed-values column starts at the same place.
+  local cols
+  cols=$(printf '%s\n' "$SHOW_OUT" | grep -E '\((below|split|true)' | awk '{ print index($0, "(") }' | sort -u | wc -l | tr -d ' ')
+  assert_eq "1" "$cols" "allowed values are aligned"
+}
+
+test_config_show_reports_the_last_good_settings_when_the_file_has_problems() {
+  write_config '{ "open_in": "window" }'
+  show_flow show # the server loads the good file and keeps a copy
+  assert_contains "$(show_row open_in)" "window" "the good file"
+  write_config '{ "open_in": "tab" }'
+  show_flow show
+  assert_eq "0" "$SHOW_STATUS" "exit"
+  assert_contains "$SHOW_OUT" "last good settings are in effect" "says what is in effect"
+  assert_contains "$SHOW_OUT" "trex config check" "points to check"
+  assert_contains "$(show_row open_in)" "window" "the last good value is shown, not the bad one"
+}
+
+test_config_show_action_returns_the_settings_and_whether_the_file_blocks() {
+  trex_do trex_config_show
+  assert_status 0 "the action"
+  assert_eq "false" "$(printf '%s' "$DO_OUT" | jq -r '.blocking')" "no problems"
+  assert_eq "below" "$(printf '%s' "$DO_OUT" | jq -r '.settings["devtools.side"]')" "settings come back flat"
+  write_config '{ "open_in": "tab" }'
+  trex_do trex_config_show
+  assert_eq "true" "$(printf '%s' "$DO_OUT" | jq -r '.blocking')" "a bad file is blocking"
+}
+
+test_config_show_reads_the_file_when_rex_cannot_be_asked() {
+  write_config '{ "open_in": "window" }'
+  SHOW_DO=none show_flow show
+  assert_eq "0" "$SHOW_STATUS" "exit"
+  assert_contains "$SHOW_OUT" "Rex isn't reachable" "says so"
+  assert_contains "$(show_row open_in)" "window" "the file's value"
+  rm -f "$TREX_CONFIG"
+  SHOW_DO=none show_flow show
+  assert_contains "$SHOW_OUT" "no config file yet" "no file: the defaults"
+  assert_contains "$(show_row open_in)" "split" "the default"
+  write_config '{ "open_in": "tab" }'
+  SHOW_DO=none show_flow show
+  assert_contains "$SHOW_OUT" "The file has problems" "a bad file is named"
+  assert_contains "$(show_row open_in)" "split" "the defaults then"
+}
+
+test_config_bare_config_is_show() {
+  write_config '{ "open_in": "window" }'
+  local show
+  show_flow show; show=$SHOW_OUT
+  show_flow
+  assert_eq "0" "$SHOW_STATUS" "bare config exits 0"
+  assert_eq "$show" "$SHOW_OUT" "bare config prints what show prints"
+}
+
+test_config_show_lists_a_setting_added_to_the_schema_without_code_changes() {
+  local dir out; dir=$(mktemp -d)
+  jq '.properties.extra_flag = {type: "boolean", default: false, "x-summary": "a made-up setting"}' \
+    "$TREX_ROOT/lua/trex/config.schema.json" >"$dir/schema.json"
+  cat >"$dir/run.lua" <<EOF
+local util = assert(loadfile("$TREX_ROOT/lua/trex/util.lua"))()
+local config = assert(loadfile("$TREX_ROOT/lua/trex/config.lua"))(util, "$dir/schema.json")
+print(config.report("$TREX_CONFIG", { extra_flag = true, default_url = "http://localhost:3000", open_in = "split", ["pick.stay_on"] = true, ["devtools.side"] = "below" }))
+rex.stop(0)
+EOF
+  out=$("$REX" do "$dir/run.lua" 2>&1)
+  assert_contains "$out" "* extra_flag" "the new setting is listed, and marked as changed"
+  assert_contains "$out" "(true | false)" "with its allowed values"
+  assert_contains "$out" "a made-up setting" "and its summary"
+  rm -rf "$dir"
+}
+
+test_config_help_ends_with_the_settings_list_without_current_values() {
+  write_config '{ "open_in": "window" }'
+  local out; out=$(XDG_CONFIG_HOME=$(CFG_XDG) "$TREX_ROOT/bin/trex" config --help 2>&1)
+  assert_contains "$out" "trex config [show]" "names show"
+  assert_contains "$out" "devtools.side" "lists the settings"
+  assert_contains "$out" "(below | above | right | left)" "with allowed values"
+  assert_contains "$(printf '%s\n' "$out" | grep ' open_in ')" "split" "the default, not the file's value"
+  assert_eq "0" "$(printf '%s\n' "$out" | grep -c '^\*')" "nothing is marked"
 }

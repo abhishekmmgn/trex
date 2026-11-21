@@ -25,7 +25,7 @@ assert_help() { # NEEDLES ARGS...
 test_help_overview_lists_every_command() {
   local flag
   for flag in --help -h help; do
-    assert_help "install|uninstall|block|setup|config edit|config check|config reload|browser|ctl|mcp" "$flag"
+    assert_help "install|uninstall|block|setup|config show|config edit|config check|config reload|browser|ctl|mcp" "$flag"
   done
   run_help
   assert_eq 2 "$HELP_STATUS" "bare trex exits 2"
@@ -36,7 +36,7 @@ test_help_overview_lists_every_command() {
 test_help_overview_has_one_line_per_command() {
   run_help --help
   local c
-  for c in install uninstall block setup "config edit" "config check" "config reload" browser ctl mcp; do
+  for c in install uninstall block setup "config show" "config edit" "config check" "config reload" browser ctl mcp; do
     assert_eq 1 "$(printf '%s\n' "$HELP_OUT" | grep -c "^  $c ")" "one line for $c"
   done
 }
@@ -100,16 +100,16 @@ test_help_config_names_its_commands_and_opens_no_editor() {
   for flag in --help -h; do
     for sub in "" edit check reload; do
       # $sub is left unquoted on purpose: empty means no argument.
-      assert_help "trex config edit|trex config check|trex config reload" config $sub "$flag"
+      assert_help "trex config show|trex config edit|trex config check|trex config reload|devtools.side" config $sub "$flag"
     done
   done
   [ ! -e "$dir/editor-ran" ] || fail "an editor was opened"
   [ ! -e "$dir/xdg" ] || fail "config --help created $dir/xdg"
-  # Bare `trex config` still prints the usage and exits 2.
-  run_help config
-  assert_eq 2 "$HELP_STATUS" "bare trex config exits 2"
-  assert_contains "$HELP_ERR" "trex config edit" "bare trex config prints the usage on stderr"
-  assert_eq "" "$HELP_OUT" "bare trex config prints nothing on stdout"
+  # An unknown subcommand prints the usage and exits 2.
+  run_help config frobnicate
+  assert_eq 2 "$HELP_STATUS" "trex config frobnicate exits 2"
+  assert_contains "$HELP_ERR" "trex config edit" "trex config frobnicate prints the usage on stderr"
+  assert_eq "" "$HELP_OUT" "trex config frobnicate prints nothing on stdout"
   rm -rf "$dir"
 }
 

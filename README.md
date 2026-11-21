@@ -24,9 +24,9 @@ See `.scratch/trex/spec.md`, `GLOSSARY.md` and `docs/adr/`.
     pick mode on or off by running `pick.js` in its page (`kb ctl -i ID eval`); `pick-wait.sh`, started in the background, waits for the pick and
     copies the description.
   - `state.lua`: trex's saved state (`~/.local/state/trex/state.json`): the side DevTools was last on, with the `devtools.side` it was moved under.
-  - `config.lua`, `config.schema.json`, `config.default.json`, `config-check.lua`: trex's settings file, see Config. `config.lua` is a strict JSON
+  - `config.lua`, `config.schema.json`, `config.default.json`, `config-check.lua`, `config-show.lua`: trex's settings file, see Config. `config.lua` is a strict JSON
     reader and a checker against the schema (the one place that says which settings there are and their defaults), and the settings the server
-    holds: `config.get("devtools.side")`. `config-check.lua` is the `rex do` script behind `trex config check`. `config.default.json` is the
+    holds: `config.get("devtools.side")`. `config-check.lua` is the `rex do` script behind `trex config check`. `config.lua` also renders the settings list (rows from the schema's `x-summary`), for the `trex_config_show` action and for `config-show.lua`, the `rex do` script behind `trex config show` without a server and the `--help` list. `config.default.json` is the
     file `trex setup` writes.
 - `bin/trex`: adds or removes the marked block in Rex's config. `bin/trex browser|ctl|mcp` (`bin/trex-agent`) are for agents, see Agents.
   `bin/trex config` is `bin/trex-config`. `bin/trex setup` is `bin/trex-setup`. `bin/trex-lib.sh` holds the shell helpers they and the tests share. Each script holds its own help text (`usage()` / `help_*`), which `--help` prints; `tests/test_help.sh` checks them.
@@ -44,6 +44,9 @@ bin/trex setup --yes        # also replace a kb at another commit, from another 
 ```
 
 Each requirement prints `ok` (already there), `installed`, `skipped` or `FAILED` with the reason. What is present is left alone, so rerunning changes nothing.
+The last step puts `trex` on your PATH: it links `~/.local/bin/trex` to the main checkout's `bin/trex` (`ok` if the link is already right, `would` under
+`--dry-run`). If something else is already at that path, setup says `skipped` and leaves it. If `~/.local/bin` isn't on your PATH it prints the `export PATH=...`
+line to add to your shell profile; it never edits shell files.
 cargo comes from an existing `cargo` (also `~/.cargo/bin/cargo`), else Homebrew's `rustup` if `brew` exists (it is keg-only, so setup runs
 `$(brew --prefix rustup)/bin/rustup-init` and then uses `~/.cargo/bin/cargo`), else the official rustup installer.
 Chrome is detected in `/Applications` or `~/Applications`, else installed with `brew install --cask google-chrome`, else from Google's official dmg (no Homebrew needed).
@@ -153,6 +156,13 @@ config, and it refreshes the schema. A missing file means all defaults, and a mi
 - `devtools.side` (`"below"`, `"above"`, `"right"` or `"left"`): where a DevTools Pane opens beside its Browser Pane. Moving a DevTools Pane is still
   remembered, but changing this value makes the next one open on the new value and drops the remembered side. There is no `"remember"` value.
 - `pick.stay_on` (`true`|`false`): whether pick mode stays on after a pick. It is read each time pick mode starts, so a reload applies to the next one.
+- `bin/trex config show` (also bare `bin/trex config`): the config path, then one row per
+  setting with its value in effect, its allowed values and a one-line description. A value that differs from the default is marked `*` and names the default.
+  The values are what the running Rex uses (it asks the server's read-only `trex_config_show` action, which never reloads). If the file has problems it says the
+  last good settings are in effect and points to `trex config check`; if the file differs from what Rex holds it points to `trex config reload`; if Rex can't be
+  reached (or trex isn't installed in it) it shows the file's values, or the defaults, and says so. Every row comes from `lua/trex/config.schema.json` (the
+  one-line text is each setting's `x-summary`; `description` stays the long editor hover text), so a new setting appears without touching `show`.
+  `bin/trex config --help` ends with the same list, with defaults instead of current values.
 - `bin/trex config edit`, or **Trex: Edit Config** in the palette (a split beside the focused pane): creates the file and schema if missing and opens
   the file in `$VISUAL`, else `$EDITOR`, else `vi`. When the editor exits the file is checked, and a valid one is reloaded. With problems it lists
   them and asks `(e)dit again / (k)eep anyway / (r)evert`. Revert puts back the last good file (the defaults if there is none yet). Keep leaves the
@@ -182,7 +192,7 @@ never picked (they aren't in `kb list`). With no Browser Pane, or two in the win
 never falls back to another kb. So a Browser Pane opened or reopened after the agent started is found without restarting anything.
 
 Setup, once:
-- Put `trex` on the agent's PATH, e.g. `ln -s "$PWD/bin/trex" ~/.local/bin/trex`, or give the agent the full path.
+- `trex` on the agent's PATH: `bin/trex setup` links `~/.local/bin/trex` for you (make sure `~/.local/bin` is on the agent's PATH), or give the agent the full path.
 - MCP (optional): `kb mcp on` (kb's own switch), then `claude mcp add kb -- "$PWD/bin/trex" mcp` instead of the `kb mcp serve` that
   `kb mcp on` suggests. `trex mcp` is kb's MCP server with each tool call sent to the Browser Pane beside the agent at the time of the call.
 - Skill (optional): `kb skill install` teaches the agent kb's commands. Its own recipe opens a separate kb pane; tell the agent to use the
