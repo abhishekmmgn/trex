@@ -17,6 +17,9 @@
 --                 TREX_PROMPT_PICK says: "id" (the default: the answer is a row id),
 --                 "text" (typed text, as { text = … }), or the reason it returns
 --                 with no answer: "unsupported", "failed", "busy", "cancelled".
+--   TREX_CLIENT_LOG a file each rex.client.queue call is appended to, as a JSON line.
+--                 rex.client.queue never reaches a Rex app from here, set or not, so
+--                 tests never switch the user's app to a test session.
 
 local this_file = debug.getinfo(1, "S").source:gsub("^@", "")
 local root = this_file:match("^(.*)/tests/[^/]*$")
@@ -34,6 +37,20 @@ local kb_history = os.getenv("TREX_KB_HISTORY")
 if kb_history ~= nil and kb_history ~= "" then opts.kb_history = kb_history end
 local clipboard = os.getenv("TREX_CLIPBOARD")
 if clipboard ~= nil and clipboard ~= "" then opts.clipboard = clipboard end
+
+-- Client actions (such as session.select) would go to the user's app, so record them instead.
+local client_log = os.getenv("TREX_CLIENT_LOG")
+local function fake_queue(name, args)
+  if client_log == nil or client_log == "" then return end
+  local f = assert(io.open(client_log, "a"))
+  f:write(rex.json.encode({ name = name, args = args or {} }), "\n")
+  f:close()
+end
+rex.client = rex.client or {}
+rex.client.queue = fake_queue
+if rex.client.queue ~= fake_queue then
+  error("tests/load.lua: couldn't replace rex.client.queue", 0)
+end
 
 local prompt_log = os.getenv("TREX_PROMPT")
 if prompt_log ~= nil and prompt_log ~= "" then

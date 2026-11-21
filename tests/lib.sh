@@ -181,6 +181,7 @@ run_test() { # FUNCTION
   export TREX_STATE="$TREX_STATE_DIR/state.json"
   # And its own config file path (not created), so none ever reads the user's ~/.config/trex.
   export TREX_CONFIG="$TREX_STATE_DIR/xdg/trex/config.json"
+  export TREX_CLIENT_LOG="$TREX_STATE_DIR/client-actions.jsonl"
   # And its own kb history file path (not created), so none ever suggests from ~/.kittybrowser/history.
   export TREX_KB_HISTORY="$TREX_STATE_DIR/kb-history"
   if ! new_session; then fail "couldn't create a throwaway Rex session"; else "$1"; fi

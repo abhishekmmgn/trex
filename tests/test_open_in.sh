@@ -55,6 +55,11 @@ test_open_in_window_opens_a_new_focused_window() {
   [ "$window" != "$(oi_window_of "$ANCHOR")" ] || fail "the Browser Pane is in the pane's own window"
   assert_eq "$window" "$(oi_active_window)" "the new window is the one shown"
   assert_eq "$BROWSER" "$(oi_focused_in "$window")" "the Browser Pane has focus"
+  assert_eq "trex browser" "$("$REX" session inspect "$SESSION" --json | jq -r --arg w "$window" '.windows[] | select(.window_id == $w) | .label')" \
+    "the window is labelled"
+  # The app shows that window: trex asks the app that ran the action to go to it.
+  assert_eq "session.select $SESSION $window" \
+    "$(jq -r '"\(.name) \(.args.session_id) \(.args.window_id)"' "$TREX_CLIENT_LOG")" "the app is asked to show the new window"
 }
 
 test_open_in_split_stays_in_the_window() {
@@ -63,6 +68,7 @@ test_open_in_split_stays_in_the_window() {
   oi_open "$ANCHOR" || return
   assert_eq "$windows" "$(oi_window_count)" "no new window"
   assert_eq "$(oi_window_of "$ANCHOR")" "$(oi_window_of "$BROWSER")" "same window as the pane it was opened from"
+  [ ! -s "$TREX_CLIENT_LOG" ] || fail "a split asked the app to switch tabs: $(cat "$TREX_CLIENT_LOG")"
 }
 
 test_open_in_window_devtools_opens_in_that_window_below() {

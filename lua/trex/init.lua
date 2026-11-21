@@ -77,7 +77,13 @@ function M.setup(opts)
   -- focused pane's session, focused; "split" (or no focused pane) is right of the focused pane.
   local function place_browser(ctx, layout)
     if ctx.block_id == nil or config.get("open_in") == "window" then
-      return rex.session.new_window{ label = "trex browser", layout = layout, focus = true }
+      local r, err = rex.session.new_window{ window_label = "trex browser", layout = layout, focus = true }
+      -- focus = true only makes it the session's active window on the server. Which tab an app
+      -- shows is the app's own state, so ask the app that ran this action to go to it.
+      if r ~= nil and r.window_id ~= nil and ctx.session_id ~= nil then
+        rex.client.queue("session.select", { session_id = ctx.session_id, window_id = r.window_id })
+      end
+      return r, err
     end
     return rex.session.new_split{
       anchor_id = ctx.block_id,
