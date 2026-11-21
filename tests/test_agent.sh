@@ -14,7 +14,7 @@ agent_open_browser() { # BLOCK URL
   BROWSER=$(printf '%s' "$DO_OUT" | jq -r '.block_id // empty')
   [ -n "$BROWSER" ] || { fail "trex_open returned no block_id: $DO_OUT"; return 1; }
   BLOCKS_SEEN+=("$BROWSER")
-  BROWSER_ID=$(kb_row "$BROWSER" | cut -f4)
+  BROWSER_ID=$(kb_row "$BROWSER" | kb_field id)
   [ -n "$BROWSER_ID" ] || { fail "kb list never showed a kb in $BROWSER"; return 1; }
   kb_url "$BROWSER" "$2" >/dev/null || { fail "the kb in $BROWSER never showed $2"; return 1; }
 }

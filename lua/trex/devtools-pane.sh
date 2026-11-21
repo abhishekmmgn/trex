@@ -19,7 +19,7 @@
 # Pane, remembers its side, and follows the page the Browser Pane shows.
 #
 # DevTools keeps its settings in localStorage of the origin it is served from,
-# http://127.0.0.1:PORT, and the port changes with every Browser Pane kb run, so
+# http://127.0.0.1:PORT, and the port changes every time the Browser Pane's kb starts, so
 # the setting is written each time. The key is `screencast-enabled` (Chrome 158).
 
 kb=$TREX_KB socket=$TREX_SOCKET profile=$TREX_PROFILE rex=$TREX_REX

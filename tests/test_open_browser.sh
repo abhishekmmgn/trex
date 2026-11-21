@@ -91,7 +91,7 @@ test_prompt_starts_empty_with_the_default_as_a_hint() {
 }
 
 # The pin check reads cargo's install record; these hand trex a made-up one.
-PIN=$(sed -n 's/^M\.PIN = "\(.*\)"$/\1/p' "$TREX_ROOT/lua/trex/pin.lua")
+PIN=$(pinned_kb PIN)
 
 fake_crates2() { # INSTALL_KEY...  → path of a crates2.json listing those installs
   local file; file=$(mktemp)

@@ -6,7 +6,7 @@
 #   die MESSAGE          print "trex: MESSAGE" on stderr and exit 1
 #   pinned_kb REPO|PIN   the pinned KittyBrowser, from lua/trex/pin.lua (the one place it lives)
 #   kb_rows_in LIST BLOCKS   the rows of `kb list` output LIST whose pane is one of BLOCKS
-#   kb_field NAME        from `kb list` rows on stdin, the column NAME: number, url, pane or id
+#   kb_field NAME...     from `kb list` rows on stdin, the columns NAME: number, url, pane, id
 #
 # kb_rows_in and kb_field are the one place shell code reads `kb list`'s format:
 # one line per kb, "number<TAB>url<TAB>pane<TAB>id". A kb that isn't answering
@@ -27,12 +27,16 @@ kb_rows_in() { # LIST BLOCKS
     <(printf '%s\n' "$2") <(printf '%s\n' "$1")
 }
 
-kb_field() { # NAME
-  case $1 in
-    number) cut -f1 ;;
-    url) cut -f2 ;;
-    pane) cut -f3 ;;
-    id) cut -f4 ;;
-    *) die "kb_field: no column $1" ;;
-  esac
+kb_field() { # NAME... (several are printed tab-separated, in `kb list`'s order)
+  local name fields=
+  for name in "$@"; do
+    case $name in
+      number) fields=$fields,1 ;;
+      url) fields=$fields,2 ;;
+      pane) fields=$fields,3 ;;
+      id) fields=$fields,4 ;;
+      *) die "kb_field: no column $name" ;;
+    esac
+  done
+  cut -f"${fields#,}"
 }

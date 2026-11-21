@@ -20,7 +20,7 @@ open_browser() { # URL
 # `kb list` → instance number → its profile's DevToolsActivePort → /json/list.
 expected_inspector() { # BLOCK PAGE_URL
   local n profile port target
-  n=$(kb_row "$1" | cut -f1)
+  n=$(kb_row "$1" | kb_field number)
   if [ "$n" = 1 ]; then profile=$HOME/.kittybrowser/profile; else profile=$HOME/.kittybrowser/profile-$n; fi
   port=$(head -n 1 "$profile/DevToolsActivePort")
   target=$(/usr/bin/curl -s -m 2 "http://127.0.0.1:$port/json/list" |
@@ -83,7 +83,7 @@ open_devtools_and_check() { # BLOCK PAGE_URL
   assert_eq "false" "$(devtools_ctl "$DEVTOOLS_SOCKET" eval "localStorage.getItem('screencast-enabled')")" \
     "DevTools' screencast setting"
   # Hidden from `kb list`, so plain `kb ctl` and agents never pick it.
-  assert_eq "" "$("$KB" list 2>/dev/null | awk -F '\t' -v b="$DEVTOOLS" '$3 == b')" "kb list shows no kb in the DevTools Pane"
+  assert_eq "" "$(kb_rows_in "$("$KB" list 2>/dev/null)" "$DEVTOOLS")" "kb list shows no kb in the DevTools Pane"
 }
 
 test_devtools_opens_below_for_the_browser_panes_page() {
@@ -251,7 +251,7 @@ test_each_browser_panes_devtools_attach_to_its_own_page() {
 
 # `kb ctl` against the Browser Pane BLOCK's kb, always with its id (-i).
 browser_ctl() { # BLOCK ARGS...
-  local id; id=$(kb_row "$1" | cut -f4); shift
+  local id; id=$(kb_row "$1" | kb_field id); shift
   [ -n "$id" ] || { fail "no kb id for the Browser Pane"; return 1; }
   "$KB" ctl -i "$id" "$@"
 }

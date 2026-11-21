@@ -3,7 +3,7 @@
 # hdiutil are stubs that log their arguments to $LOG and fake just the files
 # setup looks for. Chrome and kb are never launched.
 
-SETUP_PIN=$(sed -n 's/^M\.PIN = "\(.*\)"$/\1/p' "$TREX_ROOT/lua/trex/pin.lua")
+SETUP_PIN=$(pinned_kb PIN)
 
 stub() { # NAME BODY: a command on the fake PATH that logs "NAME args" first
   printf '#!/bin/bash\necho "%s $*" >>"$LOG"\n%s\n' "$1" "$2" >"$T/bin/$1"

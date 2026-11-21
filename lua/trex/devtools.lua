@@ -125,7 +125,7 @@ function M.new(opts)
     local target, why = kb.shown_target(browser.id, port)
     if target == nil then error(why, 0) end
 
-    -- One socket and profile per Browser Pane kb run, so DevTools Panes for
+    -- One socket and profile per run of the Browser Pane's kb, so DevTools Panes for
     -- several Browser Panes can be open at once. The socket path must stay under 104 bytes.
     local dir = kb.data_dir() .. "/trex-devtools"
     local socket = dir .. "/" .. browser.id .. ".sock"

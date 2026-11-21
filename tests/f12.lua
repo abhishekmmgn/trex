@@ -14,8 +14,8 @@
 -- kb's own F12 would open DevTools in some other kb's Chrome. Tests use a copy
 -- of cat named kb instead.
 
-local here = debug.getinfo(1, "S").source:gsub("^@", "")
-local root = here:match("^(.*)/tests/[^/]*$")
+local this_file = debug.getinfo(1, "S").source:gsub("^@", "")
+local root = this_file:match("^(.*)/tests/[^/]*$")
 
 local function source_of(name)
   local f = assert(io.open(root .. "/lua/trex/" .. name .. ".lua", "r"))

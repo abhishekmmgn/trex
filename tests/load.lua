@@ -9,8 +9,8 @@
 --                 answers with the text TREX_PROMPT_ANSWER, and writes what it
 --                 was asked (the rex.ui.input table, as JSON) to this file.
 
-local here = debug.getinfo(1, "S").source:gsub("^@", "")
-local root = here:match("^(.*)/tests/[^/]*$")
+local this_file = debug.getinfo(1, "S").source:gsub("^@", "")
+local root = this_file:match("^(.*)/tests/[^/]*$")
 
 local opts = {}
 local crates2 = os.getenv("TREX_CRATES2")

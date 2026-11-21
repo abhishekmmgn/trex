@@ -25,7 +25,8 @@
 
 set -u
 
-REX=${REX:-$(command -v rex || echo "$HOME/Library/Application Support/com.superlogical.rex/RexServer/Versions/Current/Rex Server.app/Contents/MacOS/rex")}
+# REX, pinned_kb, kb_rows_in and kb_field (see there).
+. "$TREX_ROOT/bin/trex-lib.sh"
 KB=${KB:-$HOME/.cargo/bin/kb}
 TREX_LOAD="$TREX_ROOT/tests/load.lua"
 
@@ -34,7 +35,7 @@ TESTS_FAILED=0
 CURRENT_FAILED=0
 SESSIONS_CREATED=()
 BLOCKS_SEEN=()
-DEVTOOLS_SOCKETS=()   # control sockets of DevTools Pane kbs, which `kb list` doesn't show
+DEVTOOLS_SOCKETS=()   # control sockets of the DevTools Panes' kbs, which `kb list` doesn't show
 
 log() { printf '%s\n' "$*" >&2; }
 
@@ -134,10 +135,8 @@ trex_do() {
 kb_row() {
   local i row
   for i in $(seq 1 80); do
-    row=$("$KB" list 2>/dev/null | awk -F '\t' -v b="$1" '$3 == b')
-    if [ -n "$row" ] && ! printf '%s' "$row" | grep -q 'not answering'; then
-      printf '%s\n' "$row"; return 0
-    fi
+    row=$(kb_rows_in "$("$KB" list 2>/dev/null)" "$1")
+    if [ -n "$row" ]; then printf '%s\n' "$row"; return 0; fi
     sleep 0.25
   done
   return 1
@@ -149,7 +148,7 @@ kb_row() {
 kb_url() { # BLOCK URL
   local i url=
   for i in $(seq 1 80); do
-    url=$("$KB" list 2>/dev/null | awk -F '\t' -v b="$1" '$3 == b {print $2}')
+    url=$(kb_rows_in "$("$KB" list 2>/dev/null)" "$1" | kb_field url)
     if [ "$url" = "$2" ]; then printf '%s\n' "$url"; return 0; fi
     sleep 0.25
   done
@@ -182,7 +181,7 @@ check_no_leftover_kbs() {
     list=$("$KB" list 2>/dev/null)
     leftover=
     for b in ${BLOCKS_SEEN[@]+"${BLOCKS_SEEN[@]}"}; do
-      if printf '%s\n' "$list" | awk -F '\t' -v b="$b" '$3 == b {f=1} END {exit !f}'; then leftover="$leftover $b"; fi
+      if [ -n "$(kb_rows_in "$list" "$b")" ]; then leftover="$leftover $b"; fi
     done
     for b in ${DEVTOOLS_SOCKETS[@]+"${DEVTOOLS_SOCKETS[@]}"}; do
       if [ -n "$b" ] && [ -S "$b" ] && KB_SOCKET=$b "$KB" ctl status >/dev/null 2>&1; then leftover="$leftover $b"; fi
