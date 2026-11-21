@@ -17,9 +17,9 @@ Things already known (see ticket 05 and ticket 06's Comments):
 
 **Status:** ready-for-agent
 
-- [ ] The cause of the sideways shift is found and shown with evidence: the wheel reports the terminal sends during a vertical or diagonal trackpad swipe, and what kb sends to Chrome for them
-- [ ] The cause of the slow, unsmooth scrolling is measured: input rate, kb's merging of reports, Chrome's frame time and the frame pipeline, with the bottleneck named
-- [ ] Fixes needing kb's code go on a KittyBrowser branch and follow its conventions; nothing is pushed until the user agrees
+- [x] The cause of the sideways shift is found and shown with evidence: the wheel reports the terminal sends during a vertical or diagonal trackpad swipe, and what kb sends to Chrome for them
+- [x] The cause of the slow, unsmooth scrolling is measured: input rate, kb's merging of reports, Chrome's frame time and the frame pipeline, with the bottleneck named
+- [x] Fixes needing kb's code go on a KittyBrowser branch and follow its conventions; nothing is pushed until the user agrees
 - [x] The user confirms on transitions.dev that the sideways shift is gone and scrolling feels better
 
 ## Comments
