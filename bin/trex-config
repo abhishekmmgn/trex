@@ -21,10 +21,19 @@ set -u
 . "$(dirname "$0")/trex-lib.sh"
 
 usage() {
-  printf '%s\n' 'usage: trex config edit      edit the config file; it is checked when the editor exits' \
-    '       trex config check     check the config file; print each problem with its key and line' \
-    '       trex config reload    make the running Rex use the config file now' >&2
+  cat <<'EOF'
+usage: trex config edit      edit the config file; it is checked when the editor exits
+       trex config check     check the config file; print each problem with its key and line
+       trex config reload    make the running Rex use the config file now
+
+The file is $XDG_CONFIG_HOME/trex/config.json (default ~/.config/trex/config.json).
+  -h, --help                 print this text
+EOF
 }
+# Before anything else runs: help must not open an editor.
+for arg in "$@"; do
+  case "$arg" in --help | -h) usage; exit 0 ;; esac
+done
 
 config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/trex"
 config_file="$config_dir/config.json"
@@ -112,7 +121,7 @@ edit_config() {
 }
 
 cmd=${1:-}; [ $# -gt 0 ] && shift
-[ $# -eq 0 ] || { usage; exit 2; }
+[ $# -eq 0 ] || { usage >&2; exit 2; }
 
 case "$cmd" in
   edit)
@@ -125,7 +134,7 @@ case "$cmd" in
     reload_server || exit 1
     ;;
   *)
-    usage
+    usage >&2
     exit 2
     ;;
 esac
