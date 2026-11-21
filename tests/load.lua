@@ -6,6 +6,7 @@
 --   TREX_KB       the kb binary trex runs (tests/lib.sh sets it to $KB)
 --   TREX_CRATES2  the cargo install record to check the pinned kb against
 --   TREX_STATE    trex's state file (tests/lib.sh gives each test its own)
+--   TREX_CONFIG   trex's config file (tests/lib.sh gives each test its own, in a temp dir)
 --   TREX_CLIPBOARD the command Element Handoff copies with, so tests never
 --                 touch the user's clipboard
 --   TREX_PROMPT   a file: when set, rex.ui.input never reaches a Rex app. It
@@ -22,6 +23,8 @@ local crates2 = os.getenv("TREX_CRATES2")
 if crates2 ~= nil and crates2 ~= "" then opts.crates2 = crates2 end
 local state = os.getenv("TREX_STATE")
 if state ~= nil and state ~= "" then opts.state = state end
+local config = os.getenv("TREX_CONFIG")
+if config ~= nil and config ~= "" then opts.config = config end
 local clipboard = os.getenv("TREX_CLIPBOARD")
 if clipboard ~= nil and clipboard ~= "" then opts.clipboard = clipboard end
 

@@ -21,6 +21,7 @@ check_json() { "$REX" config check --json "$1"; }
 # Installs into CONFIG and checks Rex loads it cleanly with trex's action and key.
 installs_cleanly() { # CONFIG
   local before after
+  local -x XDG_CONFIG_HOME XDG_STATE_HOME; XDG_CONFIG_HOME=$(mktemp -d); XDG_STATE_HOME=$(mktemp -d)
   # The live config may hold a trex block already; count without it.
   "$TREX_BIN" uninstall --config "$1" >/dev/null 2>&1 || { fail "uninstall from $1 failed"; return; }
   before=$(check_json "$1" | jq '.bindings')
@@ -30,6 +31,7 @@ installs_cleanly() { # CONFIG
   assert_eq "Trex: Open Browser…" "$(printf '%s' "$after" | jq -r '.actions[] | select(.name == "trex_open") | .title')" "palette title"
   assert_eq "Trex: Toggle DevTools" "$(printf '%s' "$after" | jq -r '.actions[] | select(.name == "trex_devtools") | .title')" "DevTools palette title"
   assert_eq "Trex: Pick Element" "$(printf '%s' "$after" | jq -r '.actions[] | select(.name == "trex_pick") | .title')" "Pick Element palette title"
+  assert_eq "Trex: Reload Config" "$(printf '%s' "$after" | jq -r '.actions[] | select(.name == "trex_reload_config") | .title')" "Reload Config palette title"
   assert_eq "$((before + 4))" "$(printf '%s' "$after" | jq '.bindings')" "four more key bindings (cmd+shift+b, f12, cmd+shift+i, cmd+shift+e)"
   assert_contains "$(cat "$1")" "dofile(\"$TREX_ROOT/lua/trex/init.lua\").setup(" "block loads trex from --repo"
 }
@@ -51,6 +53,7 @@ test_install_into_a_copy_of_the_live_config() {
 
 test_install_is_idempotent_and_uninstall_restores_the_file() {
   local config original once twice
+  local -x XDG_CONFIG_HOME XDG_STATE_HOME; XDG_CONFIG_HOME=$(mktemp -d); XDG_STATE_HOME=$(mktemp -d)
   config=$(fixture_config)
   original=$(cat "$config")
   "$TREX_BIN" install --config "$config" --repo "$TREX_ROOT" >/dev/null 2>&1 || fail "first install"
@@ -67,6 +70,7 @@ test_install_is_idempotent_and_uninstall_restores_the_file() {
 
 test_install_that_fails_the_check_leaves_the_config_unchanged() {
   local config original
+  local -x XDG_CONFIG_HOME XDG_STATE_HOME; XDG_CONFIG_HOME=$(mktemp -d); XDG_STATE_HOME=$(mktemp -d)
   config=$(fixture_config)
   original=$(cat "$config")
   if "$TREX_BIN" install --config "$config" --repo /nonexistent/trex >/dev/null 2>&1; then
