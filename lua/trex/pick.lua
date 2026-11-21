@@ -30,7 +30,8 @@ end
 
 -- opts: kb (kb.lua's kb), js (path of pick.js), waiter (path of pick-wait.sh),
 -- clipboard (a command that copies its stdin, /usr/bin/pbcopy), rex (the rex
--- CLI, which the waiter pastes with).
+-- CLI, which the waiter pastes with), stay_on (a function: whether pick mode
+-- stays on after a pick, config.get("pick.stay_on"); read when pick mode starts).
 function M.new(opts)
   local kb = opts.kb
   local pick = {}
@@ -122,6 +123,9 @@ function M.new(opts)
 
     local js = util.read(opts.js)
     if js == nil then error("trex: couldn't read " .. opts.js, 0) end
+    -- Read now, so a reload of the config applies to the next pick mode.
+    local stay_on = opts.stay_on == nil or opts.stay_on() ~= false
+    js = "(stayOn => (\n" .. js .. "\n))(" .. tostring(stay_on) .. ")"
     local r = rex.exec({ kb.bin, "ctl", "-i", browser.id, "eval", js },
       { timeout = 5, env = { KB_SOCKET = false, KB_INSTANCE = false } })
     local answer = r and r.ok and (r.stdout or ""):gsub("%s+$", "")
@@ -138,7 +142,7 @@ function M.new(opts)
     -- output goes nowhere, or rex.exec would wait for it.
     rex.exec({ "/bin/sh", "-c", '"$0" "$@" </dev/null >/dev/null 2>&1 &',
       "/bin/sh", opts.waiter, kb.bin, browser.id, opts.clipboard, opts.rex, ctx.session_id,
-      agent and agent.block or "", agent and agent.name or "", why or "" }, { timeout = 3 })
+      agent and agent.block or "", agent and agent.name or "", why or "", tostring(stay_on) }, { timeout = 3 })
     return { started = true, kb = browser.id, browser = browser.block,
       agent = agent and agent.block, agent_name = agent and agent.name, why = why }
   end

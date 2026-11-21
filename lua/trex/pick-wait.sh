@@ -4,19 +4,22 @@
 # background once pick.js has turned pick mode on; it ends when the user
 # picks, cancels, or the page goes away.
 #
-#   pick-wait.sh KB KB_ID CLIPBOARD REX SESSION AGENT AGENT_NAME WHY
+#   pick-wait.sh KB KB_ID CLIPBOARD REX SESSION AGENT AGENT_NAME WHY STAY_ON
 #
 # KB is the kb binary, KB_ID the Browser Pane's kb ("N-xxxx"), CLIPBOARD a
 # command that reads the text to copy on stdin (/usr/bin/pbcopy), REX the rex
 # CLI. AGENT is the Agent Pane's block in Rex session SESSION and AGENT_NAME
 # what runs there ("Claude Code"); with no AGENT, WHY says why there is none.
+# STAY_ON is "true" when pick mode stays on after a pick (pick.stay_on): then
+# this goes on waiting for the next pick, until the user cancels. Else it ends
+# after one pick.
 #
 # Each wait asks the page for at most 25 s, because kb gives up on a request
 # after 30 s (REQUEST_TIMEOUT in its src/devtools.rs). A wait that fails anyway
 # is retried while pick mode is still on; once the page is gone or pick mode is
 # off, this exits. The page ends pick mode itself if no wait comes for 90 s.
 
-kb=$1 id=$2 clipboard=$3 rex=$4 session=$5 agent=$6 agent_name=$7 why=$8
+kb=$1 id=$2 clipboard=$3 rex=$4 session=$5 agent=$6 agent_name=$7 why=$8 stay_on=$9
 
 # Never with a DevTools Pane's KB_SOCKET, which beats -i.
 unset KB_SOCKET KB_INSTANCE
@@ -68,6 +71,7 @@ while :; do
       else
         if [ $copied = yes ]; then note "Copied to the clipboard ($why)"; else note "trex couldn’t copy to the clipboard"; fi
       fi
+      [ "$stay_on" = true ] && continue
       exit 0 ;;
     *) exit 0 ;;
   esac

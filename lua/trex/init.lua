@@ -149,6 +149,7 @@ function M.setup(opts)
     waiter = DIR .. "/pick-wait.sh",
     clipboard = opts.clipboard or "/usr/bin/pbcopy",
     rex = opts.rex or find_rex(home),
+    stay_on = function() return config.get("pick.stay_on") end,
   }
 
   rex.action{
