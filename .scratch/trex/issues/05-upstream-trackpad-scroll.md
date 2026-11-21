@@ -7,7 +7,7 @@
 **Status:** ready-for-agent
 
 - [ ] Scrolling with a Mac trackpad in Rex feels proportional; a mouse wheel still scrolls a sensible amount per notch
-- [ ] KittyBrowser's own tests and CI checks pass on the branch
+- [x] KittyBrowser's own tests and CI checks pass on the branch
 - [x] The user has been asked, and agreed, before the pull request is opened on `graiz/kittybrowser`
 - [x] The pull request is open upstream
 
@@ -15,3 +15,4 @@
 - 2026-11-21: fix committed locally in `/Users/abhishekmmgn/Projects/trex-browser`, branch `trackpad-scroll-delta` (9671b44); CI checks pass. The user tried it: it works, though not quite as smooth as a real browser. The user said not to push or open the PR for now.
 - 2026-11-21: pushed to the fork only (`origin` = `abhishekmmgn/trex-browser`), branch `trackpad-scroll-delta` (9671b44). No PR. trex now pins `trex-pin` (1cc86f1), which contains it (ADR-0002).
 - 2026-11-21: the user asked for the upstream PR; opened https://github.com/graiz/KittyBrowser/pull/14 (together with 09's fixes, branch scroll-quality).
+- Trackpad confirmed by the user. A mouse wheel has not been tried by hand.
