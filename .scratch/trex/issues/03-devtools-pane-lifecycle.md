@@ -90,3 +90,4 @@ Left for a human:
 
 Left for a human: following a real popup in the app (a site that opens a window), the side after dragging the pane with the mouse and
 closing it with Rex's close, and how the new notice looks.
+- 2026-11-21: the user reports `fn+F12` works properly in the Rex app after the review fixes.
