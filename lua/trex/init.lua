@@ -162,6 +162,37 @@ function M.setup(opts)
   }
   rex.bind("cmd+shift+e", "trex_pick")
 
+  -- Opens `trex config edit` in a split beside the focused pane (a new window if there is
+  -- none). The command is an absolute path: the server's PATH is /usr/bin:/bin.
+  rex.action{
+    name = "trex_edit_config",
+    title = "Trex: Edit Config",
+    description = "Edit trex's config file in your editor ($VISUAL, else $EDITOR, else vi). It is checked when you quit, and reloaded if valid.",
+    category = "Trex",
+    keywords = "trex config configuration settings edit json options",
+    run = function(ctx)
+      -- A pane's command doesn't go through the user's shell startup files, so a $EDITOR set
+      -- in ~/.zshrc isn't there. Run it in the user's login shell (SHELL is set in the server).
+      local trex_bin = (DIR .. "/../../bin/trex"):gsub("'", "'\\''")
+      local layout = { block = { flavor = util.SHELL, label = "trex config",
+        options = { command = { os.getenv("SHELL") or "/bin/sh", "-lic", "exec '" .. trex_bin .. "' config edit" } } } }
+      local r, err
+      if ctx.block_id == nil then
+        r, err = rex.session.new_window{ label = "trex config", layout = layout, focus = true }
+      else
+        r, err = rex.session.new_split{
+          anchor_id = ctx.block_id,
+          direction = "horizontal",
+          side = "after",
+          focus = true,
+          layout = layout,
+        }
+      end
+      if err ~= nil or r == nil then error("trex: couldn't open a pane: " .. tostring(err), 0) end
+      return { block_id = r.block_ids and r.block_ids[1] }
+    end,
+  }
+
   -- Makes the server use the config file's settings now. An invalid file is refused:
   -- the last good settings stay, and the error says what is wrong. `trex config reload`
   -- runs this with `rex do trex_reload_config`.
