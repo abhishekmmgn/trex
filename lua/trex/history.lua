@@ -21,6 +21,12 @@ function M.title(address)
   return (address:gsub("^%a[%w+.-]*://", ""):gsub("/+$", ""))
 end
 
+-- What makes two URLs the same row: the whole URL, but for a trailing slash. (http and
+-- https of one host are different servers.)
+local function same(address)
+  return (address:gsub("/+$", ""))
+end
+
 -- The URLs in the history file text `text`, best first, as { url, score, visited }.
 -- Lines that aren't `count<TAB>epoch<TAB>url` are skipped, and so are URLs starting
 -- with "-" (kb would read them as flags). A URL listed twice counts once, at its best score.
@@ -32,7 +38,7 @@ function M.ranked(text, now)
     if count ~= nil and count > 0 and address:sub(1, 1) ~= "-" then
       visited = tonumber(visited)
       local score = count * weight(now - visited)
-      local key = M.title(address)
+      local key = same(address)
       if best[key] == nil or score > best[key].score then
         best[key] = { url = address, score = score, visited = visited }
       end
@@ -53,11 +59,11 @@ end
 -- only the default. A row's id is its URL.
 function M.rows(util, path, default_url, limit, now)
   local rows = { { id = default_url, title = M.title(default_url), subtitle = "default", icon = "globe" } }
-  local skip = M.title(default_url)
+  local skip = same(default_url)
   local added = 0
   for _, entry in ipairs(M.ranked(util.read(path), now)) do
     if added >= limit then break end
-    if M.title(entry.url) ~= skip then
+    if same(entry.url) ~= skip then
       rows[#rows + 1] = { id = entry.url, title = M.title(entry.url), subtitle = entry.url, icon = "globe" }
       added = added + 1
     end

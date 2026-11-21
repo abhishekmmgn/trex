@@ -64,6 +64,18 @@ c.example/docs" "$(pick_titles)" "row titles: the default first and not repeated
   rm -rf "$PROMPT_DIR"
 }
 
+# http and https of one host are different servers: only a trailing slash is ignored.
+test_http_and_https_are_different_rows() {
+  write_history "5 60 https://localhost:3000" "4 60 http://localhost:3000/" "3 60 http://h.example" \
+    "2 60 https://h.example/" "1 60 https://h.example"
+  prompted_open ""
+  assert_eq "default
+https://localhost:3000
+http://h.example
+https://h.example/" "$(pick_spec '.items[] | .subtitle')" "https of the default is its own row, a trailing slash is not, and the rest are not merged"
+  rm -rf "$PROMPT_DIR"
+}
+
 test_rows_stop_at_fifty_history_urls() {
   local lines=() i
   for i in $(seq 1 60); do lines+=("$i 60 http://site$i.example"); done
