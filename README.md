@@ -102,7 +102,7 @@ changing trex's Lua.
     settings), then opens the inspector, so DevTools never shows its page preview.
 - **Trex: Pick Element** (`cmd+shift+e`), in a Browser Pane or a pane beside one: hover the page to outline elements, click one, and a description
   of it is pasted, unsent, into the pane running Claude Code, Codex or Cursor's CLI, and copied to the clipboard (a note on the page says
-  which). Focus stays in the Browser Pane, so you can pick more: each pick adds to what waits in the agent's input. The agent pane is the one the command ran from if an agent runs there, else the one in the Browser Pane's tab, else
+  which). Focus stays in the Browser Pane, and with `pick.stay_on` (default `true`) pick mode stays on, so you can pick more: each pick adds to what waits in the agent's input. With `false`, pick mode ends after one pick (run the command again for another). The agent pane is the one the command ran from if an agent runs there, else the one in the Browser Pane's tab, else
   in the session; of several, the one last focused in its tab. With none, or several, it is only copied. trex checks the agent is still running
   before pasting, so it never types into a shell. Esc, or the command again, stops. The click that picks never
   reaches the page; the wheel still scrolls. An empty layer drawn over its parent (a ripple, a link overlay, such as YouTube's on its buttons)
@@ -133,13 +133,14 @@ changing trex's Lua.
 
 trex's settings are in `~/.config/trex/config.json` (`$XDG_CONFIG_HOME/trex/config.json`), next to `config.schema.json`, which gives editors
 completion, hover help and red squiggles (ADR-0003). `bin/trex setup` creates both with every default written out. It never overwrites an existing
-config, and it refreshes the schema. A missing file means all defaults, and a missing key gets its default. No setting changes behaviour yet.
+config, and it refreshes the schema. A missing file means all defaults, and a missing key gets its default.
 
 ```json
 { "$schema": "./config.schema.json", "default_url": "http://localhost:3000", "open_in": "split",
   "devtools": { "side": "below" }, "pick": { "stay_on": true } }
 ```
 
+- `pick.stay_on` (`true`|`false`): whether pick mode stays on after a pick. It is read each time pick mode starts, so a reload applies to the next one.
 - `bin/trex config edit`, or **Trex: Edit Config** in the palette (a split beside the focused pane): creates the file and schema if missing and opens
   the file in `$VISUAL`, else `$EDITOR`, else `vi`. When the editor exits the file is checked, and a valid one is reloaded. With problems it lists
   them and asks `(e)dit again / (k)eep anyway / (r)evert`. Revert puts back the last good file (the defaults if there is none yet). Keep leaves the

@@ -9,6 +9,13 @@
 
 PICK_URL=
 
+# Writes this test's config file with pick.stay_on VALUE (true|false). The
+# server reads it when pick mode starts, so it can change between picks.
+pick_stay_on() { # VALUE
+  mkdir -p "$(dirname "$TREX_CONFIG")"
+  printf '{ "pick": { "stay_on": %s } }\n' "$1" >"$TREX_CONFIG"
+}
+
 # Opens a Browser Pane on PAGE (default pick.html) in tests/site, right of
 # $ANCHOR, waits until READY (a JS expression) is true there, and points the
 # clipboard at a file of this test's own. Sets $BROWSER, $BROWSER_ID, $CLIP.
@@ -19,6 +26,8 @@ pick_setup() { # [PAGE READY]
   printf '#!/bin/sh\nprintf %%s "$LC_CTYPE" > "%s.ctype"\ncat > "%s"\n' "$CLIP" "$CLIP" >"$CLIP_DIR/copy"
   chmod +x "$CLIP_DIR/copy"
   export TREX_CLIPBOARD=$CLIP_DIR/copy
+  # Most tests are about one pick, so pick mode ends after it, unless a test says otherwise.
+  pick_stay_on false
 
   trex_do trex_open url="$PICK_URL"
   assert_status 0 "trex_open url=$PICK_URL"
@@ -214,6 +223,59 @@ test_pick_right_after_a_pick_gets_its_click() {
   "$KB" ctl -i "$BROWSER_ID" click '#name' >/dev/null
   wait_for_clip || { fail "the second pick, started at once, never copied"; pick_teardown; return; }
   assert_eq '<input id="name">' "$(sed -n 1p "$CLIP")" "the second pick got its own click"
+  pick_teardown
+}
+
+# --- pick.stay_on (settings ticket 06) -----------------------------------------
+
+test_pick_stay_on_false_ends_pick_mode_after_one_pick() {
+  pick_setup || { pick_teardown; return; }
+  start_pick
+  "$KB" ctl -i "$BROWSER_ID" click '#save' >/dev/null
+  wait_for_clip || { fail "nothing was copied"; pick_teardown; return; }
+  wait_for_page '!document.getElementById("__trex_pick")' true || fail "the overlay is still on the page"
+  # After the second its click leftovers are swallowed, the next click reaches the page.
+  sleep 1.2
+  local before; before=$(page_eval 'window.heard.click')
+  "$KB" ctl -i "$BROWSER_ID" click '#name' >/dev/null
+  wait_for_page "window.heard.click > $before" true || fail "the click after the pick never reached the page"
+  assert_eq 1 "$(page_eval 'globalThis.__trexPick.active() ? 0 : 1')" "pick mode is off"
+  pick_teardown
+}
+
+# Presses SELECTOR's element the way a user's click does, from the page. Not
+# `kb ctl click`: when the page doesn't hear a click (a pick swallows it), kb
+# repeats it with a script, which with pick mode still on would pick again.
+press_in_page() { # SELECTOR
+  page_eval "(() => { const r = document.querySelector('$1').getBoundingClientRect();
+    const x = r.left + r.width / 2, y = r.top + r.height / 2, el = document.elementFromPoint(x, y);
+    for (const type of ['pointerdown', 'pointerup', 'click'])
+      el.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, composed: true, clientX: x, clientY: y, button: 0 }));
+    return 'ok'; })()" >/dev/null
+}
+
+test_pick_stay_on_true_keeps_picking_and_focus() {
+  pick_setup || { pick_teardown; return; }
+  pick_stay_on true
+  start_agent "$ANCHOR" || { pick_teardown; return; }
+  start_pick
+  press_in_page '#save'
+  wait_for_clip || { fail "nothing was copied"; pick_teardown; return; }
+  assert_eq '<button id="save"' "$(sed -n 1p "$CLIP" | cut -c1-17)" "the first pick"
+  assert_eq true "$(overlay_shown)" "pick mode is still on after a pick"
+  : >"$CLIP"
+  press_in_page '#name'
+  wait_for_clip || { fail "the second pick never copied"; pick_teardown; return; }
+  assert_eq '<input id="name">' "$(sed -n 1p "$CLIP")" "the second pick"
+  # Both picks were pasted into the agent, unsent.
+  local i
+  for i in $(seq 1 40); do [ "$(grep -c $'\e\\[201~' "$AGENT_LOG")" -ge 2 ] && break; sleep 0.25; done
+  assert_eq 2 "$(grep -c $'\e\\[201~' "$AGENT_LOG")" "each pick pasted into the agent"
+  assert_eq "$BROWSER" "$(focused_block)" "focus stayed in the Browser Pane"
+  assert_eq 0 "$(page_eval 'window.heard.click')" "the page never heard the picking clicks"
+  # Esc ends it, and the waiter with it.
+  "$KB" ctl -i "$BROWSER_ID" press Escape >/dev/null
+  wait_for_page '!document.getElementById("__trex_pick")' true || fail "Esc didn't end pick mode"
   pick_teardown
 }
 

@@ -1,6 +1,8 @@
 // Element Handoff's pick mode, injected into a Browser Pane's page with
 // `kb ctl -i ID eval` (pick.lua). One expression: it turns pick mode on, or off
-// if it is already on, and returns "started" or "cancelled".
+// if it is already on, and returns "started" or "cancelled". pick.lua wraps it
+// in `(stayOn => …)(true|false)`: with stayOn a pick leaves pick mode on, for
+// the next one; without it the first pick ends pick mode.
 //
 // While on, the element under the pointer is outlined the way kb's own Inspect
 // does it (margin, border, padding, content and a label), in a layer that
@@ -13,7 +15,8 @@
 // element under the pointer.
 //
 // pick-wait.sh then calls globalThis.__trexPick.wait(ms) in a loop. It resolves
-// to "picked\n" + the description as a JSON string + "\n" + the description,
+// to "picked\n" + the description as a JSON string + "\n" + the description
+// (once per pick: with stayOn, picks made between waits queue up),
 // "cancelled", or "pending" when `ms` passes
 // first (kb gives up on a request after 30 s, so each wait is shorter). If no
 // wait comes for LEASE ms, the waiter is gone and pick mode ends by itself.
@@ -356,9 +359,11 @@
 
   let result = null;        // "picked\n…" or "cancelled" once pick mode ends
   let wake = null;          // resolves the pending wait()
+  const queued = [];        // picks (with stayOn) no wait() has taken yet
   let lease = null;
   let swallowUntil = 0;     // after a pick, the rest of that click is swallowed too
   let looking = false;      // a pick is waiting for its React source
+  let pressed = false;      // this press already picked (its pointerdown; the mousedown that follows is the same press)
   let frame = 0, lastX = 0, lastY = 0;
   let base = null;          // target() under the pointer
   let current = null;       // what is outlined and a click picks: base, or an ancestor chosen with ↑
@@ -368,6 +373,16 @@
   // What wait() gives pick-wait.sh for a pick: the description as a JSON
   // string (one line, for the paste it sends Rex), then as text (to copy).
   const picked = description => 'picked\n' + JSON.stringify(description + '\n') + '\n' + description;
+
+  // A pick is done: ends pick mode, or with stayOn hands the pick to the waiter
+  // and goes on picking.
+  const hand = (el, description) => {
+    if (result !== null) return;
+    if (!stayOn) return finish(picked(description));
+    looking = false;
+    outline(el);
+    if (wake) { wake(picked(description)); wake = null; } else queued.push(picked(description));
+  };
 
   const release = () => { for (const [type, fn] of clicking) removeEventListener(type, fn, true); };
 
@@ -416,23 +431,25 @@
   const onPress = e => {
     if (result !== null) { if (performance.now() < swallowUntil) stop(e); return; }
     stop(e);
-    if (e.button !== 0 || looking) return;
+    if (e.button !== 0 || looking || pressed) return;
+    pressed = true;
     let el = current;
     if (el) {
       const r = el.getBoundingClientRect();
       if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) el = null;
     }
     el = el || target(e.clientX, e.clientY) || shown;
-    if (!el) return;
+    if (!el) { pressed = false; return; }
     outline(el);
     swallowUntil = performance.now() + 1000;
     looking = true;
     label.textContent = 'Finding source…';
-    reactOf(el).then(react => finish(picked(describe(el, react))),
-      () => finish(picked(describe(el, null))));
+    reactOf(el).then(react => hand(el, describe(el, react)),
+      () => hand(el, describe(el, null)));
   };
 
   const onRest = e => {
+    if (e.type === 'pointerup' || e.type === 'mouseup') pressed = false;
     if (result === null || performance.now() < swallowUntil) stop(e);
   };
 
@@ -458,6 +475,7 @@
     cancel: () => finish('cancelled'),
     release,
     wait: ms => {
+      if (queued.length) return Promise.resolve(queued.shift());
       if (result !== null) return Promise.resolve(result);
       renew();
       return new Promise(resolve => {

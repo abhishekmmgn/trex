@@ -10,7 +10,7 @@ The user points at something in a Browser Pane and tells the coding agent "chang
 
 - **Started by a command.** "Trex: Pick Element" in the Rex palette, bound to a new key. kb's own Inspect key (`Ctrl+Shift+C` / `Cmd+Shift+C`) stays as it is. The proposed key is `cmd+shift+e`, to be checked against Rex's app shortcuts (ticket 01; an app shortcut wins over `init.lua`).
 - **A menu in kb's top bar comes later.** A dropdown next to kb's ✕ needs kb's code, so it is a separate upstream ticket (04), like tickets 05 and 08 in `trex`.
-- **One pick, then exit.** A click hands off one element and pick mode ends. Run the command again for another.
+- **One pick, or several** (changed 2026-11-21, settings `pick.stay_on`): with `false`, a click hands off one element and pick mode ends; run the command again for another. With `true` (the default) pick mode stays on for more picks, until Esc or the command again.
 - **The Agent Pane is the pane running Claude Code, Codex or Cursor's CLI** (changed 2026-11-21: the user uses only these three, and Rex gives config Lua no focus events, so "the pane the user was in last" can't be tracked). It is the pane the command ran from, if an agent runs there; else the one agent pane in the Browser Pane's Rex window, else in its session (another tab); of several, the one last focused in its window. With none, or several that can't be told apart, the description is only copied, and the note says why.
 
 ## How it works
