@@ -9,10 +9,11 @@
 
 PICK_URL=
 
-# Opens a Browser Pane on tests/site/pick.html, right of $ANCHOR, and points
-# the clipboard at a file of this test's own. Sets $BROWSER, $BROWSER_ID, $CLIP.
-pick_setup() {
-  PICK_URL="${PAGE_URL}pick.html"
+# Opens a Browser Pane on PAGE (default pick.html) in tests/site, right of
+# $ANCHOR, waits until READY (a JS expression) is true there, and points the
+# clipboard at a file of this test's own. Sets $BROWSER, $BROWSER_ID, $CLIP.
+pick_setup() { # [PAGE READY]
+  PICK_URL="${PAGE_URL}${1:-pick.html}"
   CLIP_DIR=$(mktemp -d)
   CLIP=$CLIP_DIR/clipboard
   printf '#!/bin/sh\nprintf %%s "$LC_CTYPE" > "%s.ctype"\ncat > "%s"\n' "$CLIP" "$CLIP" >"$CLIP_DIR/copy"
@@ -27,8 +28,8 @@ pick_setup() {
   BROWSER_ID=$(kb_row "$BROWSER" | kb_field id)
   [ -n "$BROWSER_ID" ] || { fail "kb list never showed a kb in $BROWSER"; return 1; }
   kb_url "$BROWSER" "$PICK_URL" >/dev/null || { fail "the kb in $BROWSER never showed $PICK_URL"; return 1; }
-  # The page's own listeners are in place once `heard` exists.
-  wait_for_page 'typeof window.heard' object || fail "pick.html never finished loading"
+  # pick.html's own listeners are in place once `heard` exists.
+  wait_for_page "${2:-typeof window.heard === \"object\"}" true || fail "$PICK_URL never finished loading"
 }
 
 pick_teardown() {
@@ -202,8 +203,79 @@ test_pick_arrow_keys_choose_the_parent_and_back() {
   pick_teardown
 }
 
+test_pick_right_after_a_pick_gets_its_click() {
+  pick_setup || { pick_teardown; return; }
+  start_pick
+  "$KB" ctl -i "$BROWSER_ID" click '#save' >/dev/null
+  wait_for_clip || { fail "nothing was copied after the first pick"; pick_teardown; return; }
+  # Within the second the first pick still swallows its click's leftovers.
+  : >"$CLIP"
+  start_pick
+  "$KB" ctl -i "$BROWSER_ID" click '#name' >/dev/null
+  wait_for_clip || { fail "the second pick, started at once, never copied"; pick_teardown; return; }
+  assert_eq '<input id="name">' "$(sed -n 1p "$CLIP")" "the second pick got its own click"
+  pick_teardown
+}
+
 test_pick_without_a_browser_pane_says_so() {
   trex_do trex_pick
   [ "$DO_STATUS" != 0 ] || fail "trex_pick with no Browser Pane succeeded: $DO_OUT"
   assert_contains "$DO_ERR" "no Browser Pane here" "trex_pick explains"
+}
+
+# --- React (Element Handoff ticket 03) ------------------------------------------
+#
+# tests/site/react: the same small app built with React 18 and React 19 in
+# development, with source maps (tests/site/react/build.sh). React 18 keeps
+# where each element's JSX is written (_debugSource, the path esbuild gave);
+# React 19 keeps a stack into the bundle, which the source map turns into
+# react/src/… (the map's ../src/ resolved against /react/19/).
+
+# Picks SELECTOR on React fixture MAJOR and prints the description.
+react_pick() { # MAJOR SELECTOR
+  pick_setup "react/$1/" '!!document.getElementById("save")' || return 1
+  start_pick
+  "$KB" ctl -i "$BROWSER_ID" click "$2" >/dev/null
+  wait_for_clip || { fail "nothing was copied after clicking $2 on React $1"; return 1; }
+}
+
+react_expect() { # MAJOR PATH
+  local major=$1 path=$2
+  react_pick "$major" '#save' && {
+    assert_eq "<button id=\"save\" class=\"btn primary\"> in <SaveBar> at $path/SaveBar.jsx:6:7" "$(sed -n 1p "$CLIP")" "React $major: #save's first line"
+    assert_eq 'react: SaveBar ← SettingsForm ← SettingsPage' "$(sed -n '/^react: /p' "$CLIP")" "React $major: #save's components"
+  }
+  pick_teardown
+  kill_session; new_session
+  react_pick "$major" '#badge' && {
+    assert_eq "<span id=\"badge\"> in <Badge> at $path/SaveBar.jsx:14:10" "$(sed -n 1p "$CLIP")" "React $major: memo component"
+    assert_eq 'react: Badge ← SettingsForm ← SettingsPage' "$(sed -n '/^react: /p' "$CLIP")" "React $major: memo is named once"
+  }
+  pick_teardown
+  kill_session; new_session
+  react_pick "$major" '#name' && {
+    assert_eq "<input id=\"name\"> in <Field> at $path/SaveBar.jsx:19:10" "$(sed -n 1p "$CLIP")" "React $major: forwardRef component"
+  }
+  pick_teardown
+}
+
+test_pick_react_18_names_components_and_source() { react_expect 18 src; }
+
+test_pick_react_19_maps_the_stack_to_the_source() { react_expect 19 react/src; }
+
+test_pick_react_source_gives_up_after_2_s() {
+  pick_setup react/19/ '!!document.getElementById("save")' || { pick_teardown; return; }
+  # A source map that never arrives.
+  page_eval 'window.fetch = () => new Promise(() => {}); "ok"' >/dev/null
+  start_pick
+  local started; started=$(/usr/bin/python3 -c 'import time; print(time.time())')
+  "$KB" ctl -i "$BROWSER_ID" click '#save' >/dev/null
+  wait_for_clip || { fail "nothing was copied when the source never came"; pick_teardown; return; }
+  local took; took=$(/usr/bin/python3 -c "import time; print(round(time.time() - $started, 1))")
+  assert_eq '<button id="save" class="btn primary"> in <SaveBar>' "$(sed -n 1p "$CLIP")" "copied without the source"
+  assert_eq 'react: SaveBar ← SettingsForm ← SettingsPage' "$(sed -n '/^react: /p' "$CLIP")" "with the components"
+  /usr/bin/python3 -c "import sys; sys.exit(0 if 1.8 <= $took <= 4 else 1)" || fail "copied after ${took} s, not about 2 s"
+  wait_for_page '[...document.querySelectorAll("div")].some(d => d.textContent.includes("without the source"))' true ||
+    fail "the note doesn't say the source was left out"
+  pick_teardown
 }

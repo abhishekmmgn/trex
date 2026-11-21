@@ -45,10 +45,11 @@ react: SaveBar ← SettingsForm ← SettingsPage
 ## React source location
 
 React 18 and earlier keep `_debugSource` (file, line, column) on each fiber in development, so that one is read directly. React 19 dropped it and keeps `_debugStack` instead: an Error stack pointing into the bundled JS. To turn that into `file:line`, we fetch the bundle, follow its `sourceMappingURL` and decode the source map. That's what react-grab does through bippy (`bippy/dist/get-source.js`).
-- We may vendor bippy's source module (MIT, pinned version), or write the lookup ourselves. Ticket 03 decides.
+- Built ourselves rather than vendoring bippy (ticket 03): about 100 lines (stack frame, fetch, `sourceMappingURL`, VLQ decode, index maps), with no new dependency to pin.
 - Hovering never does this lookup. Only a click does.
-- The first lookup in a file downloads and parses its source map, which can take a moment on a big dev bundle. Later lookups reuse the cached map until the page reloads.
-- While it runs, the overlay's label says "Finding source…". If it takes more than 2 s, the description is handed off without the source and the label says so. This is because pasted text can't be changed once sent.
+- Maps are fetched again for each pick: hot reload changes code under the same URL (Next.js keeps `webpack-internal:///…/page.js`), so a map kept longer gives stale lines. On a local dev server the fetch costs little.
+- While it runs, the overlay's label says "Finding source…". If it takes more than 2 s, the description is handed off without the source and the note on the page says so. This is because pasted text can't be changed once sent.
+- **Next.js App Router:** pages are Server Components, so the DOM comes from the server and the client fibers above it are Next's routers. React 19 keeps the server side in development: the element's `_debugOwner` is `{ name, env: "Server", owner }`, and its `_debugStack` has a frame `rsc://React/Server/<file>?<n>:line:col`. Names follow owners (who rendered whom), and a frame the page can't fetch (`webpack-internal:`, a server chunk's `file:` URL) gets its map from Next's dev endpoint `/__nextjs_source-map?filename=…`, the one React's own dev tools use.
 
 ## Speed targets
 

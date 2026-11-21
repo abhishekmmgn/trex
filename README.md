@@ -106,6 +106,11 @@ changing trex's Lua.
   html: <button id="save" type="submit" class="btn primary">Save changes</button>
   ```
 
+  - On a React page in development the first line adds the component and where the element's JSX is written
+    (`<button> in <SaveBar> at src/SaveBar.jsx:6:7`), and a `react:` line names the components that rendered it (`SaveBar ← SettingsForm ←
+    SettingsPage`). React 18 records the source itself; for React 19 trex reads the stack React keeps and the bundle's source map (Vite, Next.js
+    with webpack or Turbopack, Server Components included). Finding it can take up to 2 s ("Finding source…"); after that the description goes
+    without it. A production build has no source, and its names may be minified.
   - `path` is built like kb's Inspect selector (tag names and `:nth-of-type` from the nearest unique id); `box` is size and position in page
     pixels; `text` is the visible text, cut at 80 characters; `html` is the opening tag (first three classes, other values cut at 60
     characters) and text, cut at 300. An `in:` line after the first names up to three web components around the element, as on YouTube.
