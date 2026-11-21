@@ -17,7 +17,7 @@
 
 ## Comments
 
-- 2026-11-21, implementer (worktree `/Users/abhishekmmgn/Projects/trex-eh-01`, branch `trex/eh-01-pick-mode`, not committed):
+- 2026-11-21, implementer (worktree `/Users/abhishekmmgn/Projects/trex-eh-01`, branch `trex/eh-01-pick-mode`):
   - Built: `lua/trex/pick.lua` (action `trex_pick`, "Trex: Pick Element", bound to `cmd+shift+e`), `lua/trex/pick.js` (runs in the page through
     `kb ctl -i ID eval`: outline, capture listeners, description, a toggle that returns `started` or `cancelled`), `lua/trex/pick-wait.sh` (started
     in the background; waits for the pick, copies it, shows "Copied to the clipboard" on the page). `setup{ clipboard = … }` sets the copy command
@@ -32,9 +32,9 @@
     A page's own window-capture listeners registered before pick mode would still run first. That's rare, so it's left alone.
   - Tests: `tests/test_pick.sh` (5): pick `#save` (exact description, page heard nothing, overlay gone, page's clicks work again), from the pane
     beside it plus Esc, the command again cancels, html cut at 300 characters with `…`, no Browser Pane. The clipboard is a stub
-    (`TREX_CLIPBOARD`), never the user's. `test_install.sh` now expects three bindings and the Pick Element title. Full suite: 52/52.
-  - **The suite needs `TREX_CRATES2`** pointing at a record that names the pin. During this work the installed kb became a build of
-    `abhishekmmgn/trex-browser` at `1cc86f1` (not done by this ticket), so trex's pin check refuses `trex_open`. That's the user's real Rex too.
+    (`TREX_CLIPBOARD`), never the user's. `test_install.sh` now expects three bindings and the Pick Element title. 
+  - Rebased onto `trex/phase-1` after the pin moved to the fork's `trex-pin` build (ADR-0002); the full suite passes 55/55 against the
+    installed kb, with no stand-in install record. Committed as `faad57a` on `trex/eh-01-pick-mode`, not merged.
   - **Left for the user (the unticked box):** the Rex app's own shortcuts aren't visible from the CLI (`rex keymap` shows only config bindings,
     and osascript has no accessibility permission to read the app's menus). Press `cmd+shift+e` in a Browser Pane after `bin/trex install` from
     the main checkout. If the palette opens something else, the app has it, and we pick another key.
