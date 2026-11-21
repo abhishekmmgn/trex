@@ -120,7 +120,7 @@ function M.setup(opts)
     -- Until the page has a title, the URL without scheme (as in the Open list).
     local name = util.clip_label(history.title(target)) or "browser"
     local layout = { block = { flavor = util.SHELL, label = name,
-      options = { command = { "/usr/bin/env", "KB_FRAME_FORMAT=jpeg95", "KB_SLOW_SCROLL=1", kb_bin, "--devtools", target } } } }
+      options = { command = { "/usr/bin/env", "KB_FRAME_FORMAT=jpeg95", "KB_SLOW_SCROLL=0", kb_bin, "--devtools", target } } } }
     local r, err = place_browser(ctx, layout)
     if err ~= nil or r == nil then error("trex: couldn't open a pane: " .. tostring(err), 0) end
     local block_id = r.block_ids and r.block_ids[1]
