@@ -3,7 +3,8 @@
 --   rex do devtools-watch.lua -s SESSION
 --
 -- with REX_BLOCK (the DevTools Pane, set by Rex) and TREX_WATCH (JSON from
--- devtools.lua: browser, the Browser Pane's block; kb, kb_id, port, target, the
+-- devtools.lua: browser, the Browser Pane's block; configured, devtools.side
+-- when the pane opened (a side is remembered with it, see devtools.lua); kb, kb_id, port, target, the
 -- Browser Pane's kb and the page DevTools shows; socket, the DevTools Pane's
 -- kb; state, trex's state file) in its environment. It
 --
@@ -50,7 +51,7 @@ rex.on("terminal.child_exited", function(ctx)
 end)
 
 rex.on("session_view_changed", function()
-  devtools_module.remember_side(state, watch.browser, devtools)
+  devtools_module.remember_side(state, watch.browser, devtools, watch.configured)
 end)
 
 -- kb has no event for switching windows, so ask it what it shows every second,

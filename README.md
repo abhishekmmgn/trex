@@ -22,7 +22,7 @@ See `.scratch/trex/spec.md`, `GLOSSARY.md` and `docs/adr/`.
   - `pick.lua`, `pick.js`, `pick-wait.sh`: Element Handoff's pick mode (`.scratch/element-handoff/`). `pick.lua` finds the Browser Pane and turns
     pick mode on or off by running `pick.js` in its page (`kb ctl -i ID eval`); `pick-wait.sh`, started in the background, waits for the pick and
     copies the description.
-  - `state.lua`: trex's saved state (`~/.local/state/trex/state.json`): the side DevTools was last on.
+  - `state.lua`: trex's saved state (`~/.local/state/trex/state.json`): the side DevTools was last on, with the `devtools.side` it was moved under.
   - `config.lua`, `config.schema.json`, `config.default.json`, `config-check.lua`: trex's settings file, see Config. `config.lua` is a strict JSON
     reader and a checker against the schema (the one place that says which settings there are and their defaults), and the settings the server
     holds: `config.get("devtools.side")`. `config-check.lua` is the `rex do` script behind `trex config check`. `config.default.json` is the
@@ -81,8 +81,10 @@ changing trex's Lua.
     if two windows show the same page, it says it can't tell which and opens nothing.
   - While it is open it follows the Browser Pane: same-tab navigation needs nothing, and when the page opens a new window and kb switches to
     it (or back), DevTools switches to that page within about a second.
-  - It opens below the Browser Pane at first. Move it (above, below, left or right of the Browser Pane), and the next one opens on that side,
-    however this one is closed (F12, Rex's own close, or with its Browser Pane). trex keeps the side in `~/.local/state/trex/state.json`.
+  - It opens on `devtools.side` (below the Browser Pane by default, see Config). Move it (above, below, left or right of the Browser Pane), and the
+    next one opens on that side, however this one is closed (F12, Rex's own close, or with its Browser Pane). trex keeps the side in
+    `~/.local/state/trex/state.json`, together with the `devtools.side` it was moved under. When you change `devtools.side` in the config, the
+    configured side wins and the remembered one is forgotten.
   - Closing the Browser Pane (or quitting its kb) closes its DevTools Pane.
   - Following the page, remembering the side and closing with the Browser Pane are done by a watcher each DevTools Pane runs,
     `rex do lua/trex/devtools-watch.lua`. It exits when the DevTools Pane closes.
@@ -128,13 +130,15 @@ changing trex's Lua.
 
 trex's settings are in `~/.config/trex/config.json` (`$XDG_CONFIG_HOME/trex/config.json`), next to `config.schema.json`, which gives editors
 completion, hover help and red squiggles (ADR-0003). `bin/trex setup` creates both with every default written out. It never overwrites an existing
-config, and it refreshes the schema. A missing file means all defaults, and a missing key gets its default. No setting changes behaviour yet.
+config, and it refreshes the schema. A missing file means all defaults, and a missing key gets its default. Only `devtools.side` changes behaviour so far.
 
 ```json
 { "$schema": "./config.schema.json", "default_url": "http://localhost:3000", "open_in": "split",
   "devtools": { "side": "below" }, "pick": { "stay_on": true } }
 ```
 
+- `devtools.side` (`"below"`, `"above"`, `"right"` or `"left"`): where a DevTools Pane opens beside its Browser Pane. Moving a DevTools Pane is still
+  remembered, but changing this value makes the next one open on the new value and drops the remembered side. There is no `"remember"` value.
 - `bin/trex config check`: prints each problem with its key, the allowed values and its line (a syntax error gives its line), and exits 1 if there
   are any. An unknown key is reported too. It is checked by `rex do lua/trex/config-check.lua`, the same code the server uses, so it needs Rex but
   nothing else.

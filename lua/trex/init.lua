@@ -69,6 +69,7 @@ function M.setup(opts)
     rex = opts.rex or find_rex(home),
     state = load("state", util, state_path),
     state_path = state_path,
+    config = config,
   }
 
   -- Opens a Browser Pane: kb --devtools URL in a split right of the focused pane.
