@@ -16,6 +16,7 @@
 #   block_ids         the session's block ids, one per line
 #   $TREX_STATE       this test's own trex state file (where the DevTools side is remembered)
 #   $TREX_CONFIG      this test's own trex config file path (the file isn't there until the test writes it)
+#   $TREX_KB_HISTORY  this test's own kb history file path (not there until the test writes it)
 #   block_rect BLOCK  the block's layout rect "x y w h" (fractions)
 #   focused_block     the focused block of the session's first window
 #   assert_eq / assert_contains / assert_status / fail
@@ -180,6 +181,8 @@ run_test() { # FUNCTION
   export TREX_STATE="$TREX_STATE_DIR/state.json"
   # And its own config file path (not created), so none ever reads the user's ~/.config/trex.
   export TREX_CONFIG="$TREX_STATE_DIR/xdg/trex/config.json"
+  # And its own kb history file path (not created), so none ever suggests from ~/.kittybrowser/history.
+  export TREX_KB_HISTORY="$TREX_STATE_DIR/kb-history"
   if ! new_session; then fail "couldn't create a throwaway Rex session"; else "$1"; fi
   kill_session
   rm -rf "$TREX_STATE_DIR"

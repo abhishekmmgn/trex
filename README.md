@@ -12,6 +12,7 @@ See `.scratch/trex/spec.md`, `GLOSSARY.md` and `docs/adr/`.
   - `pin.lua`: the pinned KittyBrowser repo and commit (the one place they live) and the check that it is the one installed.
   - `kb.lua`: running KittyBrowsers: `kb list`, what a kb shows (`kb ctl status`), its DevTools port, and the page target it shows.
   - `url.lua`: turns what the user typed into the address kb gets.
+  - `history.lua`: the rows of the Open Browser prompt: the default URL, then kb's history ranked by visits and recency.
   - `devtools.lua`: opens or closes a Browser Pane's DevTools Pane (block → kb → DevTools port → page target → inspector URL), on the remembered side.
   - `devtools-pane.sh`: the DevTools Pane's command (configured by `TREX_*` environment variables). Runs the DevTools Pane's own KittyBrowser,
     hidden from `kb list`, turns DevTools' screencast off before the inspector loads, and runs `devtools-watch.lua` beside it.
@@ -71,9 +72,13 @@ changing trex's Lua.
 
 ## Use
 
-- **Trex: Open Browser…** (`cmd+shift+b`): asks for a URL (the field starts empty; `localhost:3000` is the hint) and opens a Browser Pane, `kb --devtools URL`, to the right
-  of the focused pane. An empty answer opens the default. A bare port such as `3000` or `:3000` opens `http://localhost:3000`. Input starting with `-`
-  is refused, because kb would read it as a flag. If the installed kb isn't the pinned commit, it says so and doesn't open.
+- **Trex: Open Browser…** (`cmd+shift+b`): asks in the command palette and opens a Browser Pane, `kb --devtools URL`, to the right of the focused pane.
+  The list filters as you type. Its first row is the `default_url` setting (`http://localhost:3000` unless the config says otherwise), then up to 50 URLs
+  from kb's history (`~/.kittybrowser/history`, read each time the prompt opens), ranked by visits and recency (visits x 4 when seen in the last 4 hours,
+  x 2 in 24 hours, x 1 in 7 days, x 0.5 older). Enter on a row opens it. Enter on text that matches no row opens that text: a bare port such as `3000` or
+  `:3000` opens `http://localhost:3000`, and input starting with `-` is refused, because kb would read it as a flag. An empty answer opens `default_url`.
+  Where Rex can't show the list (`rex.ui.pick` works only in an action defined in the server's init.lua, so not from `rex do`), it asks with a plain text
+  prompt instead. If the installed kb isn't the pinned commit, it says so and doesn't open.
 - **F12** or **`cmd+shift+i`** in a Browser Pane, or **Trex: Toggle DevTools** from the palette: opens a DevTools Pane beside it, with Chrome DevTools for that pane's
   page, and leaves focus in the Browser Pane. F12 again, in the Browser Pane or the DevTools Pane, closes it. The pane is labelled
   `trex devtools <kb id>`.
@@ -192,8 +197,10 @@ What the runner does:
   profile behind (`DEVTOOLS_SOCKETS`), and it stops the page server.
 - F12 is pressed through `rex do tests/f12.lua -b BLOCK`, which loads `lua/trex/f12.lua` as a client script on its own connection with a stub
   handler, so the real config isn't involved. The kb pane in those tests is a re-signed copy of `cat` named `kb`, never a real kb.
-- The Open Browser prompt is tested by setting `TREX_PROMPT=<file>` (and `TREX_PROMPT_ANSWER`): `tests/load.lua` then answers `rex.ui.input`
-  itself and writes what it was asked to the file, and refuses to run if it can't, so no prompt reaches a Rex app.
+- The Open Browser prompt is tested by setting `TREX_PROMPT=<file>` (and `TREX_PROMPT_ANSWER`): `tests/load.lua` then answers `rex.ui.pick` and
+  `rex.ui.input` itself and writes what they were asked (the pick's items included, to `<file>.pick`), and refuses to run if it can't, so no prompt
+  reaches a Rex app. `TREX_PROMPT_PICK` says how a pick is answered: `id` (a row), `text` (typed text), or the reason it returns with no answer
+  (`unsupported`, `failed`, `busy`, `cancelled`).
 
 Writing a test: add `test_something() { … }` to a `tests/test_*.sh` file (or a new one). Use the helpers in `tests/lib.sh`: `trex_do`
 (sets `$DO_OUT`, `$DO_ERR`, `$DO_STATUS`), `block_ids`, `block_rect`, `focused_block`, `kb_row`, `kb_url`, and `assert_eq` / `assert_contains` /
@@ -204,6 +211,8 @@ Rules for tests, because the user's own Rex and kb run on the same machine:
 - Always pass the action's arguments (for example `url=`), or `TREX_PROMPT`. Otherwise Rex shows a prompt in the user's app.
 - Never send keys (F12 above all) to a real kb pane, and never run `kb ctl` / `kb mcp` without `-i ID` or a DevTools Pane's `KB_SOCKET`.
 - Never run kb or Chrome with a fake `HOME` (it pops a macOS keychain dialog).
+- kb's history is never the user's `~/.kittybrowser/history`: every test gets `$TREX_KB_HISTORY` (not created until the test writes a fixture), which
+  `tests/load.lua` hands to `setup{ kb_history = … }`.
 - trex's own config is never the user's `~/.config/trex/`: every test gets `$TREX_CONFIG` (under its temp dir), which `tests/load.lua` hands to
   `setup{ config = … }`, and `bin/trex config check` is run with a temp `XDG_CONFIG_HOME`. `bin/trex config reload` is pointed at the test's
   session with `TREX_RELOAD_DO`. Tests that make Rex load trex (`rex config check`) set a temp `XDG_CONFIG_HOME` and `XDG_STATE_HOME`, so trex
