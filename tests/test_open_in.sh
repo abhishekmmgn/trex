@@ -57,7 +57,8 @@ test_open_in_window_opens_a_new_focused_window() {
   assert_eq "$BROWSER" "$(oi_focused_in "$window")" "the Browser Pane has focus"
   assert_eq "trex browser" "$("$REX" session inspect "$SESSION" --json | jq -r --arg w "$window" '.windows[] | select(.window_id == $w) | .label')" \
     "the window is labelled"
-  # The app shows that window: trex asks the app that ran the action to go to it.
+  # trex asks the app that ran the action to show that window. (On Rex 2061 the app usually drops
+  # it: see place_browser in init.lua.)
   assert_eq "session.select $SESSION $window" \
     "$(jq -r '"\(.name) \(.args.session_id) \(.args.window_id)"' "$TREX_CLIENT_LOG")" "the app is asked to show the new window"
 }

@@ -14,7 +14,8 @@
 --   config   trex's config file (default $XDG_CONFIG_HOME/trex/config.json, else ~/.config/trex/config.json)
 --
 -- Config Lua runs in the Rex server: its PATH is only /usr/bin:/bin, and it has
--- no rex.sleep or rex.on. Use absolute paths and keep actions short.
+-- no rex.sleep or timer, and its rex.on handlers do nothing (Rex 2061: they run "from a later
+-- version of Rex"). Use absolute paths and keep actions short.
 
 local M = {}
 
@@ -80,6 +81,10 @@ function M.setup(opts)
       local r, err = rex.session.new_window{ window_label = "trex browser", layout = layout, focus = true }
       -- focus = true only makes it the session's active window on the server. Which tab an app
       -- shows is the app's own state, so ask the app that ran this action to go to it.
+      -- On Rex 2061 this rarely works: the app usually gets the select before it hears of the new
+      -- window, and stays on its tab (its log: "…on its usual window, because it has no window …").
+      -- A session.refresh first doesn't help (it doesn't wait). Fixing it needs Rex: a select that
+      -- waits for the window, or config rex.on("window_created") (a no-op in 2061).
       if r ~= nil and r.window_id ~= nil and ctx.session_id ~= nil then
         rex.client.queue("session.select", { session_id = ctx.session_id, window_id = r.window_id })
       end
