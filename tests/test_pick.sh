@@ -84,6 +84,7 @@ test_pick_copies_the_description_and_the_page_hears_nothing() {
     "page: $PICK_URL" \
     'path: #save' \
     'box: 112×32 at 94,131 (page px)' \
+    'text: Save changes' \
     'html: <button id="save" type="submit" class="btn primary">Save changes</button>')
   assert_eq "$expected" "$(cat "$CLIP")" "the description copied"
   # pbcopy reads its input as Mac Roman without a UTF-8 locale (× became √ó).
@@ -133,6 +134,33 @@ test_pick_cuts_long_html() {
   assert_eq 300 "$(printf '%s' "$html" | /usr/bin/python3 -c 'import sys; print(len(sys.stdin.read()))')" "html is cut to 300 characters"
   assert_contains "$html" '<p id="long">word word' "html starts with the element"
   case $html in *…) ;; *) fail "the cut html doesn't end with …: [$html]" ;; esac
+  local text
+  text=$(sed -n 's/^text: //p' "$CLIP")
+  assert_eq 80 "$(printf '%s' "$text" | /usr/bin/python3 -c 'import sys; print(len(sys.stdin.read()))')" "text is cut to 80 characters"
+  case $text in 'word word '*…) ;; *) fail "the text line isn't the cut text: [$text]" ;; esac
+  pick_teardown
+}
+
+test_pick_names_the_web_components_around() {
+  pick_setup || { pick_teardown; return; }
+  start_pick
+  "$KB" ctl -i "$BROWSER_ID" click '#deep' >/dev/null
+  wait_for_clip || { fail "nothing was copied after clicking #deep"; pick_teardown; return; }
+  assert_eq '<span id="deep">' "$(sed -n 1p "$CLIP")" "the element"
+  assert_eq 'in: <card-body> in <app-card>' "$(sed -n 2p "$CLIP")" "the web components around it, nearest first"
+  assert_eq 'text: Deep inside' "$(sed -n 's/^text: /text: /p' "$CLIP")" "its text"
+  pick_teardown
+}
+
+test_pick_shortens_long_attributes() {
+  pick_setup || { pick_teardown; return; }
+  start_pick
+  "$KB" ctl -i "$BROWSER_ID" click '#far' >/dev/null
+  wait_for_clip || { fail "nothing was copied after clicking #far"; pick_teardown; return; }
+  assert_eq '<a id="far" class="one two three">' "$(sed -n 1p "$CLIP")" "the element"
+  assert_eq 'html: <a id="far" class="one two three …" href="https://example.com/a/very/long/path/that/goes/on/and/on/an…">Far link</a>' \
+    "$(sed -n 's/^html: /html: /p' "$CLIP")" "three classes, and the href cut at 60 characters"
+  [ -z "$(sed -n '/^in: /p' "$CLIP")" ] || fail "an in: line on a page without web components: $(cat "$CLIP")"
   pick_teardown
 }
 

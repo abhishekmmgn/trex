@@ -49,4 +49,9 @@
     `↑`/`↓` move the outline to the parent, or back toward the element under the pointer; a click inside what is outlined picks it. Tests:
     `test_pick_skips_an_empty_layer_over_its_parent` (fails with the rule off), `test_pick_arrow_keys_choose_the_parent_and_back`. Checked live on
     youtube.com: Subscribe now gives `…yt-button-shape > button`.
-  - Seen there: a very long opening tag (YouTube's 7 classes plus aria-label) fills the 300 characters, so the button's text is cut off.
+  - Seen there and on vercel.com: long opening tags (YouTube's 7 classes plus aria-label, Tailwind class lists, thumbnail `src`) filled the
+    300 characters, so the text was cut off. Now: a `text:` line (visible text, 80 characters), `html:` keeps the first three classes and cuts
+    other attribute values at 60, and an `in:` line names up to three web components around the element (YouTube's components are custom
+    elements). Spec's "The description" updated. Tests: `test_pick_names_the_web_components_around`, `test_pick_shortens_long_attributes`, and
+    the text line in the existing ones (9/9). Live on YouTube, Subscribe gives `in: <yt-button-shape> in <yt-smartimation> in
+    <ytd-subscribe-button-renderer>`, `text: Subscribe` and the whole `html:` line.

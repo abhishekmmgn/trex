@@ -18,7 +18,10 @@
 // wait comes for LEASE ms, the waiter is gone and pick mode ends by itself.
 (() => {
   const LEASE = 90000;
-  const HTML_MAX = 300;
+  const HTML_MAX = 300;      // the html line
+  const TEXT_MAX = 80;       // the text line
+  const ATTR_MAX = 60;       // each attribute value in the html line
+  const COMPONENTS = 3;      // web components in the in line
   const ROOT_ID = '__trex_pick';
 
   const previous = globalThis.__trexPick;
@@ -114,6 +117,35 @@
     return path.join(' > ');
   };
 
+  const cut = (text, max) => text.length > max ? text.slice(0, max - 1) + '…' : text;
+
+  // The opening tag as the page has it, made short: the first three classes,
+  // and any other attribute value cut at ATTR_MAX characters.
+  const openingTag = el => {
+    const attrs = [...el.attributes].map(a => {
+      let value = a.value;
+      if (a.name === 'class') {
+        const classes = value.split(/\s+/).filter(Boolean);
+        value = classes.slice(0, 3).join(' ') + (classes.length > 3 ? ' …' : '');
+      } else {
+        value = cut(value, ATTR_MAX);
+      }
+      return ' ' + a.name + '="' + value.replace(/&/g, '&amp;').replace(/"/g, '&quot;') + '"';
+    });
+    return '<' + el.localName + attrs.join('') + '>';
+  };
+
+  // The web components (custom elements, named with a "-") around `el`,
+  // nearest first, across shadow roots: on a site built from them, such as
+  // YouTube, these are its components.
+  const components = el => {
+    const found = [];
+    for (let e = parentOf(el); e && found.length < COMPONENTS; e = parentOf(e)) {
+      if (e.localName.includes('-')) found.push('<' + e.localName + '>');
+    }
+    return found;
+  };
+
   const describe = el => {
     const attrs = [];
     if (el.id) attrs.push('id="' + el.id + '"');
@@ -122,21 +154,20 @@
     const first = '<' + el.localName + attrs.map(a => ' ' + a).join('') + '>';
 
     const r = el.getBoundingClientRect(), n = Math.round;
-    const shell = el.cloneNode(false).outerHTML;
+    const text = (el.innerText ?? el.textContent ?? '').replace(/\s+/g, ' ').trim();
+    // A void element (img, input) has no closing tag.
     const close = '</' + el.localName + '>';
-    let html = shell;
-    if (shell.endsWith(close)) {
-      const text = (el.innerText ?? el.textContent ?? '').replace(/\s+/g, ' ').trim();
-      html = shell.slice(0, -close.length) + text + close;
-    }
-    if (html.length > HTML_MAX) html = html.slice(0, HTML_MAX - 1) + '…';
+    const html = el.cloneNode(false).outerHTML.endsWith(close) ? openingTag(el) + text + close : openingTag(el);
+    const around = components(el);
 
     return [
       first,
+      ...(around.length ? ['in: ' + around.join(' in ')] : []),
       'page: ' + location.href,
       'path: ' + selector(el),
       'box: ' + n(r.width) + '×' + n(r.height) + ' at ' + n(r.left + scrollX) + ',' + n(r.top + scrollY) + ' (page px)',
-      'html: ' + html,
+      ...(text ? ['text: ' + cut(text, TEXT_MAX)] : []),
+      'html: ' + cut(html, HTML_MAX),
     ].join('\n');
   };
 

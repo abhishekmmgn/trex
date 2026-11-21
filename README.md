@@ -102,11 +102,13 @@ changing trex's Lua.
   page: http://localhost:3000/settings
   path: #save
   box: 112×32 at 94,131 (page px)
+  text: Save changes
   html: <button id="save" type="submit" class="btn primary">Save changes</button>
   ```
 
   - `path` is built like kb's Inspect selector (tag names and `:nth-of-type` from the nearest unique id); `box` is size and position in page
-    pixels; `html` is the opening tag and text, cut at 300 characters.
+    pixels; `text` is the visible text, cut at 80 characters; `html` is the opening tag (first three classes, other values cut at 60
+    characters) and text, cut at 300. An `in:` line after the first names up to three web components around the element, as on YouTube.
   - The outline and listeners live in the page, so a reload or navigation ends pick mode. If trex's waiter goes away, the page ends it by itself
     after 90 s. kb's own Inspect (`Ctrl+Shift+C`) is unchanged.
 

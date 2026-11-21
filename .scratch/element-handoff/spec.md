@@ -29,14 +29,17 @@ Plain text, short enough to read at a glance and specific enough for an agent to
 page: http://localhost:3000/settings
 path: #root > main > form > div > button:nth-of-type(2)
 box: 96×32 at 120,948 (page px)
+text: Save changes
 html: <button class="btn primary" type="submit">Save changes</button>
 react: SaveBar ← SettingsForm ← SettingsPage
 ```
 
 - **First line:** the tag with its id and up to three classes, plus the nearest React component and its source, when known.
-- **path:** a selector built like kb's `DESCRIBE`, stopping at the nearest unique id.
+- **in:** up to three web components (custom elements, named with a `-`) around the element, nearest first, across shadow roots: on a site built from them, such as YouTube, they are its components. Left out when there are none.
+- **path:** a selector built like kb's `DESCRIBE`, stopping at the nearest unique id. Kept whole even when long, so it still works as a selector.
 - **box:** size and position in page coordinates, as `DESCRIBE` gives them.
-- **html:** the opening tag and text content, cut at 300 characters with `…`.
+- **text:** the element's visible text, cut at 80 characters with `…`. Left out when there is none.
+- **html:** the opening tag and text content, cut at 300 characters with `…`. In the tag, only the first three classes are kept (then ` …`) and every other attribute value is cut at 60 characters, so long Tailwind class lists, `src` and `href` don't push out the text (seen on YouTube and vercel.com).
 - **react:** up to five component names, innermost first. Leave out the line when the page has no React. When source isn't known, leave out `at …`. A production build gives no source and may give minified names. Hand those names off as they are.
 
 ## React source location
