@@ -5,16 +5,22 @@ See `.scratch/trex/spec.md`, `GLOSSARY.md` and `docs/adr/`.
 
 ## Layout
 
-- `lua/trex/init.lua`: the plugin. `setup(opts)` defines the Rex actions and key bindings. Its sibling modules load from the same directory.
-  - `kb.lua`: KittyBrowser: binary path and the pinned-commit check.
+- `lua/trex/init.lua`: the plugin. `setup(opts)` defines the Rex actions and key bindings. Its sibling modules load from the same directory, each
+  as `loadfile(path)(the modules it needs)`.
+  - `util.lua`: small shared helpers (reading files, a DevTools endpoint's JSON, finding a block, the terminal flavor).
+  - `pin.lua`: the pinned KittyBrowser commit (the one place it lives) and the check that it is the one installed.
+  - `kb.lua`: running KittyBrowsers: `kb list`, what a kb shows (`kb ctl status`), its DevTools port, and the page target it shows.
   - `url.lua`: turns what the user typed into the address kb gets.
   - `devtools.lua`: opens or closes a Browser Pane's DevTools Pane (block → kb → DevTools port → page target → inspector URL), on the remembered side.
-  - `devtools-pane.sh`: the DevTools Pane's command. Runs the hidden DevTools kb, turns DevTools' screencast off before the inspector loads, and
-    closes the pane when its Browser Pane closes.
+  - `devtools-pane.sh`: the DevTools Pane's command (configured by `TREX_*` environment variables). Runs the DevTools Pane's own KittyBrowser,
+    hidden from `kb list`, turns DevTools' screencast off before the inspector loads, and runs `devtools-watch.lua` beside it.
+  - `devtools-watch.lua`: a `rex do` script that watches one DevTools Pane: closes it with its Browser Pane, remembers its side whenever the layout
+    changes, and points it at the window the Browser Pane's kb shows.
   - `f12.lua`: the F12 binding, and the notice it shows when something fails. Uses only `rex.bind`/`rex.session`/`rex.block.call`, so tests can load
     it as a client script.
   - `state.lua`: trex's saved state (`~/.local/state/trex/state.json`): the side DevTools was last on.
 - `bin/trex`: adds or removes the marked block in Rex's config. `bin/trex browser|ctl|mcp` (`bin/trex-agent`) are for agents, see Agents.
+  `bin/trex setup` is `bin/trex-setup`. `bin/trex-lib.sh` holds the shell helpers they and the tests share.
 - `tests/`: the `rex do` harness and the tests.
 
 ## Install
@@ -28,14 +34,16 @@ bin/trex setup --yes        # also replace a kb at another commit (or a local bu
 ```
 
 Each requirement prints `ok` (already there), `installed`, `skipped` or `FAILED` with the reason. What is present is left alone, so rerunning changes nothing.
-cargo comes from an existing `cargo` (also `~/.cargo/bin/cargo`), else Homebrew's `rustup` if `brew` exists, else the official rustup installer.
+cargo comes from an existing `cargo` (also `~/.cargo/bin/cargo`), else Homebrew's `rustup` if `brew` exists (it is keg-only, so setup runs
+`$(brew --prefix rustup)/bin/rustup-init` and then uses `~/.cargo/bin/cargo`), else the official rustup installer.
 Chrome is detected in `/Applications` or `~/Applications`, else installed with `brew install --cask google-chrome`, else from Google's official dmg (no Homebrew needed).
-A kb at another commit is only replaced after you confirm. The pin lives in `lua/trex/kb.lua`; the logic is in `bin/trex-setup`.
+A kb at another commit is only replaced after you confirm; if you don't, setup fails, because trex won't open until it is the pinned commit.
+The pin lives in `lua/trex/pin.lua`; the logic is in `bin/trex-setup`.
 
-Or by hand. The pinned KittyBrowser comes first:
+Or by hand. The pinned KittyBrowser comes first (the commit is `M.PIN` in `lua/trex/pin.lua`):
 
 ```sh
-cargo install --git https://github.com/graiz/kittybrowser --rev d252d5fe771f4d8f18fbf184d8239524b3ecda39 --force
+cargo install --git https://github.com/graiz/kittybrowser --rev "$(sed -n 's/^M\.PIN = "\(.*\)"$/\1/p' lua/trex/pin.lua)" --force
 ```
 
 Then add trex to Rex's config:
@@ -53,20 +61,26 @@ changing trex's Lua.
 
 ## Use
 
-- **Trex: Open Browser…** (`cmd+shift+b`): asks for a URL (default `http://localhost:3000`) and opens a Browser Pane, `kb --devtools URL`, to the right
+- **Trex: Open Browser…** (`cmd+shift+b`): asks for a URL (the field starts empty; `localhost:3000` is the hint) and opens a Browser Pane, `kb --devtools URL`, to the right
   of the focused pane. An empty answer opens the default. A bare port such as `3000` or `:3000` opens `http://localhost:3000`. Input starting with `-`
   is refused, because kb would read it as a flag. If the installed kb isn't the pinned commit, it says so and doesn't open.
 - **F12** in a Browser Pane, or **Trex: Toggle DevTools** from the palette: opens a DevTools Pane beside it, with Chrome DevTools for that pane's
   page, and leaves focus in the Browser Pane. F12 again, in the Browser Pane or the DevTools Pane, closes it. The pane is labelled
   `trex devtools <kb id>`.
-  - It opens below the Browser Pane at first. Move it (above, below, left or right of the Browser Pane) and close it with F12, and the next one opens
-    on that side. trex keeps the side in `~/.local/state/trex/state.json`.
-  - Closing the Browser Pane (or quitting its kb) closes its DevTools Pane: the DevTools Pane runs `rex wait` on the Browser Pane.
+  - DevTools attaches to the window kb shows. When the page has opened windows of its own, trex picks the one whose URL and title kb reports;
+    if two windows show the same page, it says it can't tell which and opens nothing.
+  - While it is open it follows the Browser Pane: same-tab navigation needs nothing, and when the page opens a new window and kb switches to
+    it (or back), DevTools switches to that page within about a second.
+  - It opens below the Browser Pane at first. Move it (above, below, left or right of the Browser Pane), and the next one opens on that side,
+    however this one is closed (F12, Rex's own close, or with its Browser Pane). trex keeps the side in `~/.local/state/trex/state.json`.
+  - Closing the Browser Pane (or quitting its kb) closes its DevTools Pane.
+  - Following the page, remembering the side and closing with the Browser Pane are done by a watcher each DevTools Pane runs,
+    `rex do lua/trex/devtools-watch.lua`. It exits when the DevTools Pane closes.
   - F12 in any pane running kb is always taken by trex, because kb's own F12 opens DevTools in a desktop Chrome window (and can land in another kb's
     Chrome). F12 in any other pane reaches the program there unchanged.
-  - When F12 can't do its work (say the kb was started without `--devtools`), it says why in a notice floating in front of the window; any key
-    closes it. The palette action reports the same message the usual way.
-  - The DevTools Pane is a second kb, started with its own `KB_SOCKET` (`~/.kittybrowser/trex-devtools/<kb id>.sock`) and Chrome profile
+  - When F12 can't do its work (say the kb was started without `--devtools`), it says why in a notice floating at the top of the window. The
+    notice doesn't take focus and goes after 8 seconds. The palette action reports the same message the usual way.
+  - The DevTools Pane's KittyBrowser is a second kb, started with its own `KB_SOCKET` (`~/.kittybrowser/trex-devtools/<kb id>.sock`) and Chrome profile
     (`~/.kittybrowser/trex-devtools/<kb id>/`, removed when the pane closes). So `kb list`, plain `kb ctl` and `kb mcp` don't see it, and agents keep
     driving the Browser Pane. To reach it: `KB_SOCKET=~/.kittybrowser/trex-devtools/<kb id>.sock kb ctl status`.
   - It first loads `http://127.0.0.1:PORT/json/version`, sets `screencast-enabled=false` in that origin's localStorage (where DevTools keeps its
@@ -114,17 +128,20 @@ What the runner does:
   block `$ANCHOR`. It kills the session afterwards, which also quits every kb and Chrome in it.
 - It drives trex with `rex do tests/load.lua --action NAME -s $SESSION -b BLOCK url=…`. `tests/load.lua` loads `lua/trex/init.lua` from this checkout
   the way the config block does. So tests never read or change `~/.config/rex/init.lua`, except that `test_install.sh` copies it to a temp file.
-- At the end it checks that `kb list` shows no kb in any block the run created, that no DevTools Pane kb still answers on its socket or left its
+- At the end it checks that `kb list` shows no kb in any block the run created, that no DevTools Pane's KittyBrowser still answers on its socket or left its
   profile behind (`DEVTOOLS_SOCKETS`), and it stops the page server.
 - F12 is pressed through `rex do tests/f12.lua -b BLOCK`, which loads `lua/trex/f12.lua` as a client script on its own connection with a stub
   handler, so the real config isn't involved. The kb pane in those tests is a re-signed copy of `cat` named `kb`, never a real kb.
+- The Open Browser prompt is tested by setting `TREX_PROMPT=<file>` (and `TREX_PROMPT_ANSWER`): `tests/load.lua` then answers `rex.ui.input`
+  itself and writes what it was asked to the file, and refuses to run if it can't, so no prompt reaches a Rex app.
 
 Writing a test: add `test_something() { … }` to a `tests/test_*.sh` file (or a new one). Use the helpers in `tests/lib.sh`: `trex_do`
 (sets `$DO_OUT`, `$DO_ERR`, `$DO_STATUS`), `block_ids`, `block_rect`, `focused_block`, `kb_row`, `kb_url`, and `assert_eq` / `assert_contains` /
-`assert_status` / `fail`. Add any block you create outside `trex_do` to `BLOCKS_SEEN`, so the leftover check covers it.
+`assert_status` / `fail`, plus `pinned_kb`, `kb_rows_in` and `kb_field` from `bin/trex-lib.sh`. Add any block you create outside `trex_do` to
+`BLOCKS_SEEN`, so the leftover check covers it.
 
 Rules for tests, because the user's own Rex and kb run on the same machine:
-- Always pass the action's arguments (for example `url=`). A missing one makes Rex show a prompt in the user's app.
+- Always pass the action's arguments (for example `url=`), or `TREX_PROMPT`. Otherwise Rex shows a prompt in the user's app.
 - Never send keys (F12 above all) to a real kb pane, and never run `kb ctl` / `kb mcp` without `-i ID` or a DevTools Pane's `KB_SOCKET`.
 - Never run kb or Chrome with a fake `HOME` (it pops a macOS keychain dialog).
 - Don't edit, reload or `rex config reload` the live config. Use `bin/trex install --config <temp file>`.

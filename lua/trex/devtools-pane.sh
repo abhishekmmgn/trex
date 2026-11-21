@@ -1,32 +1,40 @@
 #!/bin/sh
-# The DevTools Pane's command (see devtools.lua):
+# The DevTools Pane's command (see devtools.lua), configured by environment:
 #
-#   devtools-pane.sh KB PORT INSPECTOR_URL SOCKET PROFILE REX SESSION BROWSER_BLOCK
+#   TREX_KB         path of kb
+#   TREX_PORT       the Browser Pane's kb's DevTools port
+#   TREX_INSPECTOR  the inspector URL to show
+#   TREX_SOCKET     this pane's kb control socket
+#   TREX_PROFILE    this pane's Chrome profile directory
+#   TREX_REX        path of the rex CLI
+#   TREX_SESSION    the Rex session
+#   TREX_WATCH      JSON for devtools-watch.lua
 #
-# Runs kb on the Browser kb's DevTools origin with its own control socket and
-# Chrome profile, so `kb list`, `kb ctl` and `kb mcp` don't see it. In the
+# Runs kb on the Browser Pane's kb's DevTools origin with its own control socket
+# and Chrome profile, so `kb list`, `kb ctl` and `kb mcp` don't see it. In the
 # background it turns DevTools' screencast preview off, then opens the inspector,
 # so DevTools paints without the preview from the start.
 #
-# It also closes this pane when the Browser Pane closes: Rex's config Lua can't
-# react to a block closing, so a `rex wait` on the Browser Pane does it.
+# Beside it runs devtools-watch.lua, which closes this pane with its Browser
+# Pane, remembers its side, and follows the page the Browser Pane shows.
 #
 # DevTools keeps its settings in localStorage of the origin it is served from,
-# http://127.0.0.1:PORT, and the port changes with every Browser kb run, so the
-# setting is written each time. The key is `screencast-enabled` (Chrome 158).
+# http://127.0.0.1:PORT, and the port changes every time the Browser Pane's kb starts, so
+# the setting is written each time. The key is `screencast-enabled` (Chrome 158).
 
-kb=$1 port=$2 inspector=$3 socket=$4 profile=$5 rex=$6 session=$7 browser=$8
-origin=http://127.0.0.1:$port
+kb=$TREX_KB socket=$TREX_SOCKET profile=$TREX_PROFILE rex=$TREX_REX
+origin=http://127.0.0.1:$TREX_PORT
 
-export KB_SOCKET="$socket" KB_CHROME_ARGS="--user-data-dir=$profile"
+# This pane's own kb, never a Browser Pane's.
+own_kb() { KB_SOCKET="$socket" KB_CHROME_ARGS="--user-data-dir=$profile" "$kb" "$@"; }
 
 chrome_running() { /usr/bin/pgrep -f -- "--user-data-dir=$profile( |\$)" >/dev/null 2>&1; }
 
-# The profile directory marks this Browser kb's DevTools Pane as taken. If another
-# pane holds it, leave its socket and profile alone; take over only a stale one.
+# The profile directory marks this Browser Pane's DevTools Pane as taken. If
+# another pane holds it, leave its socket and profile alone; take over only a stale one.
 mkdir -p "$(dirname "$profile")"
 if ! mkdir "$profile" 2>/dev/null; then
-  if "$kb" ctl status >/dev/null 2>&1 || chrome_running; then
+  if own_kb ctl status >/dev/null 2>&1 || chrome_running; then
     echo "trex: this Browser Pane already has a DevTools Pane." >&2
     exit 1
   fi
@@ -35,11 +43,9 @@ fi
 # kb's Chrome keeps writing to its profile for a moment after kb has gone, so
 # wait (up to 5 s) for it to exit before removing the profile.
 cleanup() {
-  # Stop the watcher first, so it can't close a pane after this one is gone.
+  # Stop the watcher first, so it can't act on a pane that is gone.
   if [ -n "$watcher" ]; then
-    kids=$(/usr/bin/pgrep -P "$watcher")
-    kill -9 "$watcher" 2>/dev/null
-    [ -n "$kids" ] && kill $kids 2>/dev/null
+    kill "$watcher" 2>/dev/null
     watcher=
   fi
   rm -f "$socket"
@@ -59,26 +65,22 @@ trap 'cleanup; exit 143' TERM
   # setting once the page is on the DevTools origin.
   i=0
   while [ "$i" -lt 80 ]; do
-    shown=$("$kb" ctl eval "localStorage.setItem('screencast-enabled','false'); location.origin" 2>/dev/null)
+    shown=$(own_kb ctl eval "localStorage.setItem('screencast-enabled','false'); location.origin" 2>/dev/null)
     if [ "$shown" = "$origin" ]; then
-      exec "$kb" ctl open "$inspector"
+      own_kb ctl open "$TREX_INSPECTOR"
+      exit
     fi
     sleep 0.25
     i=$((i + 1))
   done
 ) </dev/null >/dev/null 2>&1 &
 
-# `rex wait` returns when the Browser Pane's kb exits or its block closes, either
-# way the Browser Pane is gone. REX_BLOCK is this pane, set by Rex.
-if [ -x "$rex" ] && [ -n "$session" ] && [ -n "$browser" ] && [ -n "${REX_BLOCK:-}" ]; then
-  (
-    "$rex" wait -s "$session" "$browser" >/dev/null 2>&1
-    "$rex" block close -s "$session" "$REX_BLOCK" >/dev/null 2>&1
-  ) </dev/null &
+if [ -x "$rex" ] && [ -n "${TREX_SESSION:-}" ] && [ -n "${REX_BLOCK:-}" ]; then
+  "$rex" do "$(dirname "$0")/devtools-watch.lua" -s "$TREX_SESSION" </dev/null >/dev/null 2>&1 &
   watcher=$!
 fi
 
-"$kb" "$origin/json/version"
+own_kb "$origin/json/version"
 status=$?
 cleanup
 exit "$status"

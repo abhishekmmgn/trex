@@ -5,21 +5,25 @@
 -- <inspector>`, which can land in another kb's headless Chrome. F12 anywhere else
 -- returns false, so Rex sends it on to the program in the pane unchanged.
 --
--- A key function can't prompt or fail the way an action does, so when the work
--- fails, F12 shows the message in a notice: a small pane floating in front of
--- the window that closes on any key (or after a minute).
+-- A key function can't prompt or fail the way an action does, and Rex gives
+-- plugins no way to post one of its own floating notifications (ticket 03,
+-- Comments). So when the work fails, F12 shows the message in a notice: a small
+-- pane floating at the top of the window, which leaves focus where it was and
+-- closes after 8 seconds (or on any key, once clicked).
 --
 -- This file uses only rex.bind, rex.session, rex.block.call and pcall, so the
 -- tests can load it as a client script, where io, rex.exec and dofile don't exist.
 --
--- Returns bind(on_kb_pane): binds F12 to call on_kb_pane(ctx) in kb panes.
+-- Loaded as loadfile("f12.lua")(util) → bind(on_kb_pane): binds F12 to call
+-- on_kb_pane(ctx) in kb panes.
+
+local util = ...
 
 local TERMINAL = "com.superlogical.terminal"
-local SHELL = "com.superlogical.terminal.shell"
 
 local NOTICE = [[
-printf '\n  %s\n\n  (any key closes this)' "$1"
-read -rsn1 -t 60
+printf '\n  %s' "$1"
+read -rsn1 -t 8
 ]]
 
 local function foreground(block_id)
@@ -27,22 +31,14 @@ local function foreground(block_id)
   return p and p.foreground and p.foreground.name
 end
 
--- The window that holds `block_id`, if any.
-local function window_of(block_id)
-  local listed = rex.session.list_blocks{}
-  for _, b in ipairs((listed and listed.blocks) or {}) do
-    if b.block_id == block_id then return b.window_id end
-  end
-  return nil
-end
-
--- Shows `message` in a notice in front of the window that holds `block_id`.
+-- Shows `message` in a notice at the top of the window that holds `block_id`.
 local function notice(block_id, message)
+  local b = util.find_block("block_id", block_id)
   rex.session.new_layer{
-    window_id = window_of(block_id),
-    bounds = { 0.1, 0.35, 0.8, 0.3 },
-    focus = true,
-    layout = { block = { flavor = SHELL, label = "trex notice",
+    window_id = b and b.window_id,
+    bounds = { 0.15, 0.04, 0.7, 0.16 },
+    focus = false,
+    layout = { block = { flavor = util.SHELL, label = "trex notice",
       options = { shell = "none", command = { "/bin/bash", "-c", NOTICE, "trex", message } } } },
   }
 end

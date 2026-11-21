@@ -22,3 +22,12 @@
 - Unverified on a real machine: the brew and rustup-init install path, the rustup installer path, and the Chrome dmg download and copy (URL `https://dl.google.com/chrome/mac/universal/stable/GGRO/googlechrome.dmg`) were exercised only with stub commands. The Homebrew path assumes `rustup-init -y` is on PATH after `brew install rustup`.
 - The trex block step uses the real `bin/trex install`, so it also runs `rex config check` and reload. In the tests that is a stub rex and a temp config.
 - Orchestrator check (2026-11-21): Homebrew's `rustup` formula is **keg-only**, so after `brew install rustup` neither `rustup` nor `rustup-init` is on PATH. The brew path must call it via `$(brew --prefix rustup)/bin/` (and then make sure `~/.cargo/bin/cargo` is used). To fix in the review round.
+- 2026-11-21, review round (branch `trex/review-fixes`):
+  - Keg-only rustup fixed: the Homebrew path runs `brew install rustup` then `"$(brew --prefix rustup)/bin/rustup-init" -y --no-modify-path`,
+    and afterwards uses `~/.cargo/bin/cargo` (or fails saying it isn't there). The dry run prints that command. The test brew now installs
+    `rustup-init` under its own prefix, off PATH, and the test checks setup ran it and built kb with the cargo it made.
+  - An install record that names the pin while `~/.cargo/bin/kb` is missing now reinstalls the pin without asking
+    (`test_setup_reinstalls_a_missing_pinned_kb`), instead of offering to "replace" the same commit.
+  - Declining to replace a kb at another commit is now `kb: FAILED … trex won't work until it is the pinned commit …` and setup exits 1.
+  - The pin moved to `lua/trex/pin.lua` (still the one place it lives); setup and the tests read it there, through `pinned_kb` in `bin/trex-lib.sh`.
+  - Still unverified on a real machine: all install paths run only against stubs.

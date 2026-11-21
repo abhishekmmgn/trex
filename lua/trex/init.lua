@@ -15,22 +15,17 @@
 
 local M = {}
 
-local SHELL = "com.superlogical.terminal.shell"
 local DEFAULT_URL = "http://localhost:3000"
 
 -- The directory this file is in, so its sibling modules load from the same checkout.
 local DIR = debug.getinfo(1, "S").source:gsub("^@", ""):match("^(.*)/[^/]*$")
 
-local function load(name)
-  return dofile(DIR .. "/" .. name .. ".lua")
+-- Loads sibling module `name`, handing it `...` (the modules it needs).
+local function load(name, ...)
+  return assert(loadfile(DIR .. "/" .. name .. ".lua"))(...)
 end
 
-local function exists(path)
-  local f = io.open(path, "r")
-  if f == nil then return false end
-  f:close()
-  return true
-end
+local util = load("util")
 
 -- The rex CLI. The server's PATH has no rex, so look where Rex installs it.
 local function find_rex(home)
@@ -42,7 +37,7 @@ local function find_rex(home)
     "/usr/local/bin/rex",
   }
   for _, path in ipairs(candidates) do
-    if exists(path) then return path end
+    if util.exists(path) then return path end
   end
   return candidates[1]
 end
@@ -50,27 +45,29 @@ end
 function M.setup(opts)
   opts = opts or {}
   local home = os.getenv("HOME") or ""
-  local kb = load("kb").new{
-    bin = opts.kb or (home .. "/.cargo/bin/kb"),
-    crates2 = opts.crates2 or (home .. "/.cargo/.crates2.json"),
-    home = home,
-  }
+  local kb_bin = opts.kb or (home .. "/.cargo/bin/kb")
+  local crates2 = opts.crates2 or (home .. "/.cargo/.crates2.json")
+  local pin = load("pin", util)
+  local kb_module = load("kb", util)
+  local kb = kb_module.new{ bin = kb_bin, home = home }
   local url = load("url")
-  local devtools = load("devtools").new{
+  local state_path = opts.state or ((os.getenv("XDG_STATE_HOME") or (home .. "/.local/state")) .. "/trex/state.json")
+  local devtools = load("devtools", util, kb_module).new{
     kb = kb,
     script = DIR .. "/devtools-pane.sh",
     rex = opts.rex or find_rex(home),
-    state = load("state")(opts.state or ((os.getenv("XDG_STATE_HOME") or (home .. "/.local/state")) .. "/trex/state.json")),
+    state = load("state", util, state_path),
+    state_path = state_path,
   }
 
   -- Opens a Browser Pane: kb --devtools URL in a split right of the focused pane.
   local function open_browser(ctx, address)
     local target, why = url.normalise(address, DEFAULT_URL)
     if target == nil then error(why, 0) end
-    kb.check_pin()
+    pin.check(crates2, kb_bin)
 
-    local layout = { block = { flavor = SHELL, label = "trex browser",
-      options = { command = { kb.bin, "--devtools", target } } } }
+    local layout = { block = { flavor = util.SHELL, label = "trex browser",
+      options = { command = { kb_bin, "--devtools", target } } } }
     local r, err
     if ctx.block_id == nil then
       r, err = rex.session.new_window{ label = "trex browser", layout = layout, focus = true }
@@ -99,10 +96,11 @@ function M.setup(opts)
     run = function(ctx, args)
       local address = args.url
       if address == nil then
+        -- The field starts empty, with the default only as a hint; an empty
+        -- answer opens DEFAULT_URL.
         local answer = rex.ui.input{
           title = "Open in a Browser Pane",
-          placeholder = "URL or localhost port",
-          value = DEFAULT_URL,
+          placeholder = "URL or port, e.g. localhost:3000",
           confirm = "Open",
         }
         if answer == nil then return nil end -- cancelled, timed out, or no app to ask
@@ -132,7 +130,7 @@ function M.setup(opts)
 
   -- In config, rex.invoke reaches only actions of the file that defined them, so
   -- the key calls the function rather than the action.
-  load("f12")(toggle_devtools)
+  load("f12", util)(toggle_devtools)
 end
 
 return M

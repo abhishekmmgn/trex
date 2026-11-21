@@ -21,19 +21,11 @@
 
 set -u
 
+. "$(dirname "$0")/trex-lib.sh"
 KB=${KB:-$HOME/.cargo/bin/kb}
-REX=${REX:-$(command -v rex || echo "$HOME/Library/Application Support/com.superlogical.rex/RexServer/Versions/Current/Rex Server.app/Contents/MacOS/rex")}
 
 # KB_SOCKET would beat -i and KB_INSTANCE in kb, and send everything to one socket.
 unset KB_SOCKET KB_INSTANCE
-
-die() { printf 'trex: %s\n' "$*" >&2; exit 1; }
-
-# Prints "id<TAB>url" for each kb in `kb list` whose pane is one of BLOCKS (one per line).
-kbs_in() { # BLOCKS LIST
-  awk -F '\t' 'NR == FNR { want[$0] = 1; next } ($3 in want) && $4 != "" { print $4 "\t" $2 }' \
-    <(printf '%s\n' "$1") <(printf '%s\n' "$2")
-}
 
 # Prints the kb id of the Browser Pane beside this pane, or explains on stderr and fails.
 resolve() {
@@ -41,7 +33,7 @@ resolve() {
     printf 'trex: REX_SESSION and REX_BLOCK are not set, so this is not a Rex pane and has no Browser Pane beside it. Use `kb ctl -i ID` with an id from `kb list`.\n' >&2
     return 1
   fi
-  local session_blocks window_blocks= w blocks list here all
+  local session_blocks window_blocks= w blocks list candidates
   session_blocks=$("$REX" block ls -s "$REX_SESSION" -q --short=false 2>/dev/null) ||
     { printf "trex: couldn't list the blocks of Rex session %s.\n" "$REX_SESSION" >&2; return 1; }
   for w in $("$REX" window ls -s "$REX_SESSION" -q 2>/dev/null); do
@@ -49,17 +41,17 @@ resolve() {
     if printf '%s\n' "$blocks" | grep -qxF "$REX_BLOCK"; then window_blocks=$blocks; break; fi
   done
   list=$("$KB" list 2>/dev/null)
-  here=$(kbs_in "$window_blocks" "$list")
-  all=$(kbs_in "$session_blocks" "$list")
-  [ -n "$here" ] || here=$all
-  case $(printf '%s' "$here" | grep -c .) in
-    1) printf '%s\n' "$here" | cut -f1 ;;
+  # The Browser Panes in this pane's window, else in its session.
+  candidates=$(kb_rows_in "$list" "$window_blocks")
+  [ -n "$candidates" ] || candidates=$(kb_rows_in "$list" "$session_blocks")
+  case $(printf '%s' "$candidates" | grep -c .) in
+    1) printf '%s\n' "$candidates" | kb_field id ;;
     0)
       printf 'trex: no Browser Pane in this Rex session. Open one with Trex: Open Browser… (cmd+shift+b).\n' >&2
       return 1 ;;
     *)
       printf 'trex: more than one Browser Pane here, so name one with `trex ctl -i ID COMMAND` (or `kb ctl -i ID`):\n' >&2
-      printf '%s\n' "$here" | sed 's/^/  /' >&2
+      printf '%s\n' "$candidates" | kb_field id url | sed 's/^/  /' >&2
       return 1 ;;
   esac
 }

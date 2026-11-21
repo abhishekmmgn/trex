@@ -20,7 +20,7 @@ open_browser() { # URL
 # `kb list` → instance number → its profile's DevToolsActivePort → /json/list.
 expected_inspector() { # BLOCK PAGE_URL
   local n profile port target
-  n=$(kb_row "$1" | cut -f1)
+  n=$(kb_row "$1" | kb_field number)
   if [ "$n" = 1 ]; then profile=$HOME/.kittybrowser/profile; else profile=$HOME/.kittybrowser/profile-$n; fi
   port=$(head -n 1 "$profile/DevToolsActivePort")
   target=$(/usr/bin/curl -s -m 2 "http://127.0.0.1:$port/json/list" |
@@ -52,10 +52,11 @@ devtools_url() { # SOCKET URL
 
 # Runs trex_devtools in BLOCK and checks the DevTools Pane: a new block right below
 # BLOCK, focus left where it was, whose kb shows the inspector for BLOCK's page.
-# Sets $DEVTOOLS and $DEVTOOLS_SOCKET.
+# Sets $DEVTOOLS, $DEVTOOLS_SOCKET and $OPENED_INSPECTOR.
 open_devtools_and_check() { # BLOCK PAGE_URL
   local expected before focused
   expected=$(expected_inspector "$1" "$2") || return
+  OPENED_INSPECTOR=$expected
   before=$(block_ids | wc -l | tr -d ' ')
   focused=$(focused_block)
   trex_do trex_devtools -b "$1"
@@ -82,7 +83,7 @@ open_devtools_and_check() { # BLOCK PAGE_URL
   assert_eq "false" "$(devtools_ctl "$DEVTOOLS_SOCKET" eval "localStorage.getItem('screencast-enabled')")" \
     "DevTools' screencast setting"
   # Hidden from `kb list`, so plain `kb ctl` and agents never pick it.
-  assert_eq "" "$("$KB" list 2>/dev/null | awk -F '\t' -v b="$DEVTOOLS" '$3 == b')" "kb list shows no kb in the DevTools Pane"
+  assert_eq "" "$(kb_rows_in "$("$KB" list 2>/dev/null)" "$DEVTOOLS")" "kb list shows no kb in the DevTools Pane"
 }
 
 test_devtools_opens_below_for_the_browser_panes_page() {
@@ -136,16 +137,16 @@ test_closing_the_browser_pane_closes_its_devtools_pane() {
   assert_contains "$(block_ids)" "$ANCHOR" "the other pane stays open"
 }
 
-# The pane watching for its Browser Pane to close goes when the DevTools Pane does,
-# so toggling DevTools again and again leaves nothing running.
+# The DevTools Pane's watcher (devtools-watch.lua) goes when the DevTools Pane
+# does, so toggling DevTools again and again leaves nothing running.
 test_closing_the_devtools_pane_leaves_no_watcher() {
   open_browser "$PAGE_URL" || return
   open_devtools_and_check "$BROWSER" "$PAGE_URL"
-  [ -n "$(/usr/bin/pgrep -f -- "wait -s $SESSION $BROWSER")" ] || fail "no watcher while the DevTools Pane is open"
+  [ -n "$(/usr/bin/pgrep -f -- "devtools-watch.lua -s $SESSION")" ] || fail "no watcher while the DevTools Pane is open"
   trex_do trex_devtools -b "$DEVTOOLS"
   devtools_gone "$DEVTOOLS" "$DEVTOOLS_SOCKET" || fail "the DevTools Pane is still there"
   sleep 1
-  assert_eq "" "$(/usr/bin/pgrep -f -- "wait -s $SESSION" || true)" "rex wait processes for this session"
+  assert_eq "" "$(/usr/bin/pgrep -f -- "devtools-watch.lua -s $SESSION" || true)" "watchers for this session"
 }
 
 # Moves BLOCK into a new split on SIDE of ANCHOR, as the user would in Rex.
@@ -169,15 +170,23 @@ side_of() { # A B
 }
 
 # The side the user moved the DevTools Pane to is where the next one opens, for
-# any Browser Pane, and closing it from either pane remembers it.
-remembers_side() { # DIRECTION SIDE EXPECTED CLOSE_FROM(browser|devtools)
+# any Browser Pane, however it was closed: F12 in either pane, Rex's own close,
+# or closing its Browser Pane (the next one then opens for a new Browser Pane).
+remembers_side() { # DIRECTION SIDE EXPECTED CLOSE(browser|devtools|rex|with-browser)
   open_browser "$PAGE_URL" || return
   open_devtools_and_check "$BROWSER" "$PAGE_URL"
   move_block "$DEVTOOLS" "$BROWSER" "$1" "$2"
   assert_eq "$3" "$(side_of "$BROWSER" "$DEVTOOLS")" "DevTools Pane moved"
-  if [ "$4" = devtools ]; then trex_do trex_devtools -b "$DEVTOOLS"; else trex_do trex_devtools -b "$BROWSER"; fi
-  assert_eq "true" "$(printf '%s' "$DO_OUT" | jq -r '.closed // empty')" "closed it"
+  sleep 1 # about as long as a person takes between moving a pane and closing it
+  case $4 in
+    devtools) trex_do trex_devtools -b "$DEVTOOLS" ;;
+    browser) trex_do trex_devtools -b "$BROWSER" ;;
+    rex) "$REX" block close -s "$SESSION" "$DEVTOOLS" >/dev/null || fail "rex block close the DevTools Pane" ;;
+    with-browser) "$REX" block close -s "$SESSION" "$BROWSER" >/dev/null || fail "rex block close the Browser Pane" ;;
+  esac
+  case $4 in devtools | browser) assert_eq "true" "$(printf '%s' "$DO_OUT" | jq -r '.closed // empty')" "closed it" ;; esac
   devtools_gone "$DEVTOOLS" "$DEVTOOLS_SOCKET" || { fail "the DevTools Pane is still there"; return; }
+  if [ "$4" = with-browser ]; then open_browser "${PAGE_URL}two.html" || return; fi
 
   trex_do trex_devtools -b "$BROWSER"
   assert_status 0 "reopen"
@@ -193,6 +202,14 @@ test_devtools_reopens_on_the_side_it_was_moved_to_right() {
 
 test_devtools_reopens_on_the_side_it_was_moved_to_above() {
   remembers_side vertical before above devtools
+}
+
+test_devtools_closed_by_rex_reopens_on_the_side_it_was_moved_to() {
+  remembers_side horizontal before left rex
+}
+
+test_devtools_closed_with_its_browser_pane_reopens_on_the_side_it_was_moved_to() {
+  remembers_side horizontal after right with-browser
 }
 
 test_devtools_says_so_when_kb_was_started_without_devtools() {
@@ -230,4 +247,60 @@ test_each_browser_panes_devtools_attach_to_its_own_page() {
   open_devtools_and_check "$BROWSER" "${PAGE_URL}two.html"
   [ "$first_socket" != "$DEVTOOLS_SOCKET" ] || fail "both DevTools Panes use $DEVTOOLS_SOCKET"
   [ "$first_devtools" != "$DEVTOOLS" ] || fail "both DevTools Panes are $DEVTOOLS"
+}
+
+# `kb ctl` against the Browser Pane BLOCK's kb, always with its id (-i).
+browser_ctl() { # BLOCK ARGS...
+  local id; id=$(kb_row "$1" | kb_field id); shift
+  [ -n "$id" ] || { fail "no kb id for the Browser Pane"; return 1; }
+  "$KB" ctl -i "$id" "$@"
+}
+
+# Has the page in BLOCK open URL in a new window, and waits for kb to show WINDOWS windows.
+page_opens_window() { # BLOCK URL
+  browser_ctl "$1" eval "window.open('$2'); 1" >/dev/null || { fail "window.open failed"; return 1; }
+  local i
+  for i in $(seq 1 80); do
+    browser_ctl "$1" status 2>/dev/null | grep -q '^windows: 2 open' && return 0
+    sleep 0.25
+  done
+  fail "kb never showed a second window"; return 1
+}
+
+test_devtools_attaches_to_the_window_kb_shows() {
+  open_browser "$PAGE_URL" || return
+  page_opens_window "$BROWSER" "${PAGE_URL}two.html" || return
+  kb_url "$BROWSER" "${PAGE_URL}two.html" >/dev/null || { fail "kb didn't switch to two.html"; return; }
+  open_devtools_and_check "$BROWSER" "${PAGE_URL}two.html"
+}
+
+# When the page opens a new window and kb switches its pane to it, the open
+# DevTools Pane follows; when kb goes back to the first window, so does DevTools.
+test_devtools_follows_kb_to_a_window_the_page_opens() {
+  open_browser "$PAGE_URL" || return
+  open_devtools_and_check "$BROWSER" "$PAGE_URL"
+  page_opens_window "$BROWSER" "${PAGE_URL}two.html" || return
+  kb_url "$BROWSER" "${PAGE_URL}two.html" >/dev/null || { fail "kb didn't switch to two.html"; return; }
+  local second; second=$(expected_inspector "$BROWSER" "${PAGE_URL}two.html") || return
+  assert_eq "$second" "$(devtools_url "$DEVTOOLS_SOCKET" "$second")" "DevTools follows to the new window"
+
+  browser_ctl "$BROWSER" back >/dev/null || { fail "kb ctl back"; return; }
+  kb_url "$BROWSER" "$PAGE_URL" >/dev/null || { fail "kb didn't go back to the first window"; return; }
+  assert_eq "$OPENED_INSPECTOR" "$(devtools_url "$DEVTOOLS_SOCKET" "$OPENED_INSPECTOR")" "DevTools follows back"
+}
+
+# Two windows on one page: trex can't tell which one kb shows, so it says so
+# rather than attach DevTools to either.
+test_devtools_refuses_to_guess_between_windows_on_one_page() {
+  local before
+  open_browser "$PAGE_URL" || return
+  page_opens_window "$BROWSER" "$PAGE_URL" || return
+  before=$(block_ids | wc -l | tr -d ' ')
+  trex_do trex_devtools -b "$BROWSER"
+  if [ "$DO_STATUS" = 0 ]; then
+    fail "trex_devtools picked a window: $DO_OUT"
+    DEVTOOLS_SOCKETS+=("$(printf '%s' "$DO_OUT" | jq -r '.socket // empty')")
+  fi
+  assert_contains "$DO_ERR" "can't tell which" "error"
+  assert_eq "$before" "$(block_ids | wc -l | tr -d ' ')" "no new pane"
 }

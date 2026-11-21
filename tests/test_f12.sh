@@ -65,24 +65,43 @@ test_f12_is_consumed_in_a_pane_running_kb() {
 }
 
 # A key function can't show a prompt or fail an action, so when F12's work fails
-# trex shows what went wrong in a notice in front of the window.
-test_f12_shows_what_went_wrong() {
-  local dir block notice msg="trex: the KittyBrowser in this pane (2-test) was started without DevTools."
-  dir=$(mktemp -d)
-  cp /bin/cat "$dir/kb"
-  /usr/bin/codesign --force -s - "$dir/kb" 2>/dev/null || { fail "couldn't sign the fake kb"; rm -rf "$dir"; return; }
-  block=$(pane_running kb "$dir/kb" -v) || { fail "no pane running the fake kb"; rm -rf "$dir"; return; }
+# trex shows what went wrong in a notice floating in the window, without taking
+# focus. Presses F12 in a fake kb pane with a failing handler, checks the notice,
+# and sets $NOTICE. Cleans up its fake kb in $FAKE_KB_DIR (rm -rf it after).
+f12_shows_a_notice() {
+  local block msg="trex: the KittyBrowser in this pane (2-test) was started without DevTools."
+  FAKE_KB_DIR=$(mktemp -d)
+  cp /bin/cat "$FAKE_KB_DIR/kb"
+  /usr/bin/codesign --force -s - "$FAKE_KB_DIR/kb" 2>/dev/null || { fail "couldn't sign the fake kb"; return 1; }
+  block=$(pane_running kb "$FAKE_KB_DIR/kb" -v) || { fail "no pane running the fake kb"; return 1; }
+  local focused; focused=$(focused_block)
   press_f12 "$block" "$msg"
   assert_eq "true" "$HANDLED" "F12 handled by trex"
-  notice=$("$REX" block ls -s "$SESSION" --json | jq -r '.blocks[] | select(.label == "trex notice") | .block_id' | head -n 1)
-  [ -n "$notice" ] || { fail "no trex notice pane"; rm -rf "$dir"; return; }
-  BLOCKS_SEEN+=("$notice")
+  NOTICE=$("$REX" block ls -s "$SESSION" --json | jq -r '.blocks[] | select(.label == "trex notice") | .block_id' | head -n 1)
+  [ -n "$NOTICE" ] || { fail "no trex notice pane"; return 1; }
+  BLOCKS_SEEN+=("$NOTICE")
   sleep 0.5
-  assert_contains "$(screen "$notice" | tr -d '\n')" "started without DevTools" "the notice shows the message"
-  # Any key closes it. (The notice runs bash, never kb, so a key is safe here.)
-  "$REX" send -s "$SESSION" -b "$notice" x >/dev/null 2>&1
+  assert_contains "$(screen "$NOTICE" | tr -d '\n')" "started without DevTools" "the notice shows the message"
+  assert_eq "$focused" "$(focused_block)" "focus stays where it was"
+}
+
+# Waits up to SECONDS for the notice to close; fails with MESSAGE if it doesn't.
+notice_closes_within() { # SECONDS MESSAGE
   local i
-  for i in $(seq 1 20); do block_ids | grep -qx "$notice" || break; sleep 0.25; done
-  block_ids | grep -qx "$notice" && fail "the notice stayed open after a key"
-  rm -rf "$dir"
+  for i in $(seq 1 $(($1 * 4))); do block_ids | grep -qx "$NOTICE" || return 0; sleep 0.25; done
+  fail "$2"
+}
+
+test_f12_shows_what_went_wrong_and_a_key_closes_it() {
+  f12_shows_a_notice || { rm -rf "$FAKE_KB_DIR"; return; }
+  # (The notice runs bash, never kb, so a key is safe here.)
+  "$REX" send -s "$SESSION" -b "$NOTICE" x >/dev/null 2>&1
+  notice_closes_within 5 "the notice stayed open after a key"
+  rm -rf "$FAKE_KB_DIR"
+}
+
+test_f12_notice_closes_by_itself() {
+  f12_shows_a_notice || { rm -rf "$FAKE_KB_DIR"; return; }
+  notice_closes_within 12 "the notice stayed open"
+  rm -rf "$FAKE_KB_DIR"
 }

@@ -7,24 +7,24 @@
 # Checks, in order: Rex (reported, never installed), cargo, Google Chrome, the
 # pinned KittyBrowser (ADR-0001), then the trex block in the Rex config
 # (`bin/trex install`). Each line says "ok" (already there), "installed",
-# "would" (--dry-run), "skipped" or "FAILED". Exits 1 if anything failed.
+# "would" (--dry-run), "skipped" or "FAILED". Exits 1 if anything failed,
+# including a kb at another commit left in place.
 #
 # --dry-run  print what would be done; change nothing
 # --yes      replace a KittyBrowser at another commit without asking
 #
-# The pinned commit is read from lua/trex/kb.lua, the one place it lives.
+# The pinned commit is read from lua/trex/pin.lua, the one place it lives.
 # Test hook: TREX_APPLICATIONS (colon-separated dirs searched for Google Chrome.app).
 
 set -u
 
-here=$(cd "$(dirname "$0")/.." && pwd)
-REX=${REX:-$(command -v rex || echo "$HOME/Library/Application Support/com.superlogical.rex/RexServer/Versions/Current/Rex Server.app/Contents/MacOS/rex")}
+. "$(dirname "$0")/trex-lib.sh"
 APP_DIRS=${TREX_APPLICATIONS:-/Applications:$HOME/Applications}
 CARGO_HOME_DIR=${CARGO_HOME:-$HOME/.cargo}
 
-KB_REPO=$(sed -n 's/^M\.REPO = "\(.*\)"$/\1/p' "$here/lua/trex/kb.lua")
-KB_PIN=$(sed -n 's/^M\.PIN = "\(.*\)"$/\1/p' "$here/lua/trex/kb.lua")
-[ -n "$KB_REPO" ] && [ -n "$KB_PIN" ] || { echo "trex setup: can't read the pinned kb commit from lua/trex/kb.lua" >&2; exit 1; }
+KB_REPO=$(pinned_kb REPO)
+KB_PIN=$(pinned_kb PIN)
+[ -n "$KB_REPO" ] && [ -n "$KB_PIN" ] || die "setup can't read the pinned kb commit from lua/trex/pin.lua"
 
 dry=0; yes=0; passthru=()
 while [ $# -gt 0 ]; do
@@ -32,7 +32,7 @@ while [ $# -gt 0 ]; do
     --dry-run) dry=1; shift ;;
     --yes|-y) yes=1; shift ;;
     --config|--repo) passthru+=("$1" "$2"); shift 2 ;;
-    *) echo "trex setup: unknown option $1" >&2; exit 2 ;;
+    *) printf 'trex setup: unknown option %s\n' "$1" >&2; exit 2 ;;
   esac
 done
 
@@ -56,6 +56,8 @@ else
 fi
 
 # --- cargo ----------------------------------------------------------------------
+# Homebrew's rustup is keg-only: neither rustup nor rustup-init lands on PATH, so
+# run rustup-init from its prefix. Either installer puts cargo in ~/.cargo/bin.
 find_cargo() {
   command -v cargo 2>/dev/null && return 0
   [ -x "$CARGO_HOME_DIR/bin/cargo" ] && echo "$CARGO_HOME_DIR/bin/cargo"
@@ -64,17 +66,18 @@ cargo=$(find_cargo || true)
 if [ -n "$cargo" ]; then
   ok cargo "found at $cargo"
 elif [ "$dry" = 1 ]; then
-  if command -v brew >/dev/null 2>&1; then would cargo "install Rust with: brew install rustup && rustup-init -y"
+  if command -v brew >/dev/null 2>&1; then
+    would cargo 'install Rust with: brew install rustup && $(brew --prefix rustup)/bin/rustup-init -y --no-modify-path'
   else would cargo "install Rust with the official rustup installer (https://sh.rustup.rs)"; fi
 else
   if command -v brew >/dev/null 2>&1; then
-    run brew install rustup && run rustup-init -y --no-modify-path
+    run brew install rustup && run "$(brew --prefix rustup)/bin/rustup-init" -y --no-modify-path
   else
     printf '  $ curl https://sh.rustup.rs | sh -s -- -y\n'
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
   fi
-  cargo=$(find_cargo || true)
-  if [ -n "$cargo" ]; then say "cargo: installed" "$cargo"; else fail cargo "Rust installation didn't produce a cargo"; fi
+  if [ -x "$CARGO_HOME_DIR/bin/cargo" ]; then cargo=$CARGO_HOME_DIR/bin/cargo; say "cargo: installed" "$cargo"
+  else fail cargo "Rust installation didn't produce $CARGO_HOME_DIR/bin/cargo"; fi
 fi
 
 # --- Google Chrome --------------------------------------------------------------
@@ -116,10 +119,11 @@ install_kb() {
     say "kb: installed" "pinned commit ${KB_PIN:0:8}"
   else fail kb "cargo install failed"; fi
 }
-if [ -n "$kb_key" ] && [[ "$kb_key" == *"#$KB_PIN)" ]] && [ -x "$kb_bin" ]; then
+if [[ "$kb_key" == *"#$KB_PIN)" ]] && [ -x "$kb_bin" ]; then
   ok kb "pinned commit ${KB_PIN:0:8} at $kb_bin"
-elif [ -z "$kb_key" ]; then
-  if [ "$dry" = 1 ]; then would kb "cargo install --git $KB_REPO --rev $KB_PIN"; else install_kb; fi
+elif [ -z "$kb_key" ] || [[ "$kb_key" == *"#$KB_PIN)" ]]; then
+  # Not installed, or the record says the pin but $kb_bin is gone: nothing to replace.
+  if [ "$dry" = 1 ]; then would kb "cargo install --git $KB_REPO --rev $KB_PIN --force"; else install_kb; fi
 else
   source=${kb_key#*(}; source=${source%)}
   if [ "$dry" = 1 ]; then
@@ -130,10 +134,11 @@ else
     else
       printf 'kb: the installed KittyBrowser is %s, not the pinned commit %s. Replace it? [y/N] ' "$source" "$KB_PIN"
       read -r answer || [ -n "$answer" ] || answer=n
+      echo
     fi
     case "$answer" in
       y|Y|yes) install_kb ;;
-      *) say "kb: skipped" "left $source in place; trex refuses to open until it is the pinned commit (rerun with --yes)" ;;
+      *) fail kb "left $source in place. trex won't work until it is the pinned commit: rerun setup and answer y, or use --yes" ;;
     esac
   fi
 fi
@@ -143,7 +148,7 @@ if [ "$have_rex" != 1 ]; then
   say "trex block: skipped" "needs Rex"
 elif [ "$dry" = 1 ]; then
   would "trex block" "run: bin/trex install ${passthru[*]:-}"
-elif out=$("$here/bin/trex" install ${passthru[@]+"${passthru[@]}"} 2>&1); then
+elif out=$("$TREX_DIR/bin/trex" install ${passthru[@]+"${passthru[@]}"} 2>&1); then
   case "$out" in
     *"already up to date"*) ok "trex block" "already up to date" ;;
     *) say "trex block: installed" "$(printf '%s' "$out" | head -n1)" ;;
