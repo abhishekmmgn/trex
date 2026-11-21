@@ -22,10 +22,15 @@
   const TEXT_MAX = 80;       // the text line
   const ATTR_MAX = 60;       // each attribute value in the html line
   const COMPONENTS = 3;      // web components in the in line
+  const REACT_MAX = 5;       // React components in the react line
+  const SOURCE_BUDGET = 2000; // ms a click waits for a React source location
   const ROOT_ID = '__trex_pick';
 
   const previous = globalThis.__trexPick;
   if (previous && previous.active()) { previous.cancel(); return 'cancelled'; }
+  // A pick that just ended still swallows the rest of its click for a second;
+  // its listeners come first, so they would swallow this pick's click too.
+  if (previous && previous.release) previous.release();
 
   // The element at a point, inside open shadow roots too.
   const at = (x, y) => {
@@ -146,12 +151,16 @@
     return found;
   };
 
-  const describe = el => {
+  // `react`: { names, source } from reactOf(), or null for an element React
+  // didn't render.
+  const describe = (el, react) => {
     const attrs = [];
     if (el.id) attrs.push('id="' + el.id + '"');
     const classes = [...el.classList].slice(0, 3);
     if (classes.length) attrs.push('class="' + classes.join(' ') + '"');
-    const first = '<' + el.localName + attrs.map(a => ' ' + a).join('') + '>';
+    let first = '<' + el.localName + attrs.map(a => ' ' + a).join('') + '>';
+    if (react && react.names.length) first += ' in <' + react.names[0] + '>';
+    if (react && react.source) first += ' at ' + react.source;
 
     const r = el.getBoundingClientRect(), n = Math.round;
     const text = (el.innerText ?? el.textContent ?? '').replace(/\s+/g, ' ').trim();
@@ -168,7 +177,178 @@
       'box: ' + n(r.width) + '×' + n(r.height) + ' at ' + n(r.left + scrollX) + ',' + n(r.top + scrollY) + ' (page px)',
       ...(text ? ['text: ' + cut(text, TEXT_MAX)] : []),
       'html: ' + cut(html, HTML_MAX),
+      ...(react && react.names.length ? ['react: ' + react.names.join(' ← ')] : []),
     ].join('\n');
+  };
+
+  // --- React -------------------------------------------------------------------
+  //
+  // Read from the element when it is picked (React keeps its fiber on the DOM
+  // node as __reactFiber$<random>), so any open page works without setup.
+  // Where the element's JSX is written: React 18 and earlier keep it in
+  // development as fiber._debugSource; React 19 keeps fiber._debugStack, an
+  // Error whose first frame outside React is that JSX, in the bundle, which
+  // its source map turns into the source file and line.
+
+  const fiberOf = el => {
+    for (let e = el; e; e = parentOf(e)) {
+      const key = Object.keys(e).find(k => k.startsWith('__reactFiber$'));
+      if (key) return e[key];
+    }
+    return null;
+  };
+
+  // Function, class (and React 18's indeterminate), forwardRef, memo and simple memo.
+  const COMPONENT_TAGS = new Set([0, 1, 2, 11, 14, 15]);
+  const nameOf = t => (t && (t.displayName || t.name ||
+    (t.render && (t.render.displayName || t.render.name)) || (t.type && nameOf(t.type)))) || 'Anonymous';
+
+  // The components that rendered `fiber`, innermost first. In development,
+  // owners: who rendered whom, Server Components included (an owner is then
+  // { name, env: "Server", owner }), framework wrappers such as Next.js's
+  // routers left out. Without owners (production), the components above it.
+  const componentsOf = fiber => {
+    const names = [];
+    const add = name => { if (name && names[names.length - 1] !== name) names.push(name); }; // memo(X) wraps X: one name
+    for (let o = fiber._debugOwner; o && names.length < REACT_MAX; o = o.tag !== undefined ? o._debugOwner : o.owner) {
+      add(o.tag !== undefined ? (COMPONENT_TAGS.has(o.tag) ? nameOf(o.type) : null) : o.name);
+    }
+    if (names.length) return names;
+    for (let f = fiber; f && names.length < REACT_MAX; f = f.return) {
+      if (COMPONENT_TAGS.has(f.tag)) add(nameOf(f.type));
+    }
+    return names;
+  };
+
+  // A source path for people: the dev server's own path for a file it serves,
+  // the project path inside webpack:// and turbopack:// URLs.
+  const sourcePath = (source, base, sourceRoot) => {
+    if (/^webpack:\/\//.test(source)) return source.replace(/^webpack:\/\/[^/]*\//, '').replace(/^\.\//, '').replace(/\?.*$/, '');
+    // turbopack:///[project]/app/page.js [app-rsc] (ecmascript)
+    if (/^turbopack:\/\//.test(source)) return source.replace(/^turbopack:\/\/\/(\[project\]\/)?/, '').replace(/ \[.*$/, '');
+    let url;
+    try { url = new URL((sourceRoot ? sourceRoot.replace(/\/?$/, '/') : '') + source, base); } catch { return source; }
+    if (url.protocol === 'file:') return decodeURIComponent(url.pathname);
+    if (url.origin === location.origin) return decodeURIComponent(url.pathname).replace(/^\/@fs\//, '/').replace(/^\//, '');
+    return url.href;
+  };
+
+  const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  // A source map's mappings, as one array per generated line of
+  // [generated column, source, original line, original column] (0-based).
+  const decode = mappings => {
+    const lines = [];
+    let source = 0, line = 0, column = 0;
+    for (const text of mappings.split(';')) {
+      const segments = [];
+      let generated = 0;
+      for (const segment of text.split(',')) {
+        if (!segment) continue;
+        const values = [];
+        let value = 0, shift = 0;
+        for (const ch of segment) {
+          const digit = B64.indexOf(ch);
+          value += (digit & 31) * 2 ** shift;
+          if (digit & 32) { shift += 5; continue; }
+          values.push(value % 2 ? -(value - 1) / 2 : value / 2);
+          value = 0; shift = 0;
+        }
+        generated += values[0];
+        if (values.length >= 4) {
+          source += values[1]; line += values[2]; column += values[3];
+          segments.push([generated, source, line, column]);
+        }
+      }
+      lines.push(segments);
+    }
+    return lines;
+  };
+
+  // The original "path:line:column" of 0-based `line`, `column` in a map whose
+  // sources resolve against `base`; null if it has no mapping there. Index maps
+  // (sections, as Turbopack writes) are followed into the section that holds it.
+  const original = (map, base, line, column) => {
+    if (map.sections) {
+      let section = null;
+      for (const s of map.sections) {
+        const o = s.offset;
+        if (o.line < line || (o.line === line && o.column <= column)) section = s; else break;
+      }
+      if (!section || !section.map) return null;
+      const o = section.offset;
+      return original(section.map, base, line - o.line, o.line === line ? column - o.column : column);
+    }
+    map.decoded = map.decoded || decode(map.mappings || '');
+    let hit = null;
+    for (const segment of map.decoded[line] || []) { if (segment[0] <= column) hit = segment; else break; }
+    if (!hit || map.sources[hit[1]] == null) return null;
+    return sourcePath(map.sources[hit[1]], base, map.sourceRoot) + ':' + (hit[2] + 1) + ':' + (hit[3] + 1);
+  };
+
+  // The source map of a script: { map, base } or null. A script the page can
+  // fetch names its map (sourceMappingURL). One it can't (webpack-internal:, a
+  // server file in a Next.js stack) may still have one from Next.js's dev
+  // server, as React's own dev tools get it. Fetched again for each pick: hot
+  // reload changes code under the same URL, so a map kept longer goes stale.
+  const maps = new Map();
+  const mapOf = script => {
+    if (!maps.has(script)) {
+      maps.set(script, (async () => {
+        if (/^https?:/.test(script)) {
+          const code = await (await fetch(script)).text();
+          const found = [...code.matchAll(/\/\/[#@] sourceMappingURL=(\S+)/g)].pop();
+          if (!found) return null;
+          const url = new URL(found[1], script);
+          return { map: await (await fetch(url)).json(), base: url.protocol === 'data:' ? script : url.href };
+        }
+        const r = await fetch('/__nextjs_source-map?filename=' + encodeURIComponent(script));
+        return r.ok ? { map: await r.json(), base: script } : null;
+      })().catch(() => null));
+    }
+    return maps.get(script);
+  };
+
+  // Frames that are React's or a library's, not where the JSX is written.
+  const INTERNAL = /jsxDEV|jsx-dev-runtime|react-stack-|fakeJSXCallSite|\/node_modules\/|\.vite\/deps\//;
+
+  // Where the JSX of `fiber` is written, as "path:line:column" (or "path" when
+  // only the file is known); null if React kept no source.
+  const sourceOf = async fiber => {
+    const s = fiber._debugSource;
+    if (s && s.fileName) return s.fileName + (s.lineNumber ? ':' + s.lineNumber + (s.columnNumber ? ':' + s.columnNumber : '') : '');
+    const stack = fiber._debugStack && fiber._debugStack.stack;
+    if (!stack) return null;
+    for (const line of stack.split('\n').slice(1)) {
+      const m = line.match(/at (?:(.*?) \()?(.+?):(\d+):(\d+)\)?\s*$/);
+      if (!m || INTERNAL.test(line)) continue;
+      // A Server Component's frame: rsc://React/Server/<its file>?<n>
+      const script = m[2].replace(/^rsc:\/\/React\/Server\//, '').replace(/\?\d+$/, '');
+      const found = await mapOf(script);
+      const at = found && original(found.map, found.base, +m[3] - 1, +m[4] - 1);
+      if (at && !/node_modules\//.test(at)) return at;
+      if (at) continue;
+      // webpack's eval'd modules name their file even without a map.
+      if (script.startsWith('webpack-internal:')) {
+        const file = script.replace(/^webpack-internal:\/\/\/(\([^)]*\)\/)?/, '').replace(/^\.\//, '').replace(/\?.*$/, '');
+        if (!file.includes('node_modules/')) return file;
+      }
+    }
+    return null;
+  };
+
+  // { names, source } for an element React rendered, waiting at most
+  // SOURCE_BUDGET ms for the source; null for one it didn't.
+  // `slow` is set when the source was left out for taking too long.
+  let slow = false;
+  const reactOf = async el => {
+    const fiber = fiberOf(el);
+    if (!fiber) return null;
+    const names = componentsOf(fiber);
+    let timer;
+    const timeout = new Promise(resolve => { timer = setTimeout(() => { slow = true; resolve(null); }, SOURCE_BUDGET); });
+    const source = await Promise.race([sourceOf(fiber).catch(() => null), timeout]);
+    clearTimeout(timer);
+    return { names, source };
   };
 
   // --- listeners ---------------------------------------------------------------
@@ -177,11 +357,14 @@
   let wake = null;          // resolves the pending wait()
   let lease = null;
   let swallowUntil = 0;     // after a pick, the rest of that click is swallowed too
+  let looking = false;      // a pick is waiting for its React source
   let frame = 0, lastX = 0, lastY = 0;
   let base = null;          // target() under the pointer
   let current = null;       // what is outlined and a click picks: base, or an ancestor chosen with ↑
 
   const stop = e => { e.preventDefault(); e.stopImmediatePropagation(); };
+
+  const release = () => { for (const [type, fn] of clicking) removeEventListener(type, fn, true); };
 
   const finish = value => {
     if (result !== null) return;
@@ -191,11 +374,12 @@
     for (const [type, fn] of pointing) removeEventListener(type, fn, true);
     // The press that picked is followed by its release and click, and a
     // double click by a second press: keep swallowing those, then let go.
-    setTimeout(() => { for (const [type, fn] of clicking) removeEventListener(type, fn, true); }, 1000);
+    setTimeout(release, 1000);
     if (wake) { wake(value); wake = null; }
   };
 
   const onMove = e => {
+    if (looking) return;
     lastX = e.clientX; lastY = e.clientY;
     if (frame) return;
     frame = requestAnimationFrame(() => {
@@ -227,7 +411,7 @@
   const onPress = e => {
     if (result !== null) { if (performance.now() < swallowUntil) stop(e); return; }
     stop(e);
-    if (e.button !== 0) return;
+    if (e.button !== 0 || looking) return;
     let el = current;
     if (el) {
       const r = el.getBoundingClientRect();
@@ -237,7 +421,10 @@
     if (!el) return;
     outline(el);
     swallowUntil = performance.now() + 1000;
-    finish('picked\n' + describe(el));
+    looking = true;
+    label.textContent = 'Finding source…';
+    reactOf(el).then(react => finish('picked\n' + describe(el, react)),
+      () => finish('picked\n' + describe(el, null)));
   };
 
   const onRest = e => {
@@ -246,7 +433,7 @@
 
   const onKey = e => {
     if (e.key === 'Escape') { stop(e); finish('cancelled'); }
-    else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') { stop(e); climb(e.key === 'ArrowUp'); }
+    else if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && !looking) { stop(e); climb(e.key === 'ArrowUp'); }
   };
 
   // Removed as soon as pick mode ends.
@@ -264,6 +451,7 @@
   globalThis.__trexPick = {
     active: () => result === null,
     cancel: () => finish('cancelled'),
+    release,
     wait: ms => {
       if (result !== null) return Promise.resolve(result);
       renew();
@@ -278,7 +466,7 @@
   globalThis.__trexPickNote = text => {
     const note = document.createElement('div');
     note.style.cssText = 'position:fixed;right:8px;bottom:8px;z-index:2147483647;pointer-events:none;' + tag;
-    note.textContent = text;
+    note.textContent = text + (slow ? ' (without the source: finding it took over 2 s)' : '');
     document.documentElement.appendChild(note);
     setTimeout(() => note.remove(), 1500);
     return 'ok';
