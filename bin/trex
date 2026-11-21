@@ -34,7 +34,8 @@ usage: trex COMMAND [OPTIONS]      (trex COMMAND --help for a command's options)
   install            add or update the trex block in the Rex config
   uninstall          remove the trex block from the Rex config
   block              print the trex block
-  setup              install everything trex needs: cargo, Chrome, the pinned kb, trex's config, the block
+  setup              install everything trex needs: cargo, Chrome, the pinned kb, trex's config, the block, trex on PATH
+  config show        list the settings, their values and allowed values
   config edit        edit trex's config file; it is checked when the editor exits
   config check       check the config file and print each problem
   config reload      make the running Rex use the config file now
@@ -42,6 +43,8 @@ usage: trex COMMAND [OPTIONS]      (trex COMMAND --help for a command's options)
   ctl COMMAND        for agents: run a kb ctl command on the Browser Pane beside this pane
   mcp                for agents: kb's MCP server, aimed at the Browser Pane beside this pane
   help               print this text
+
+Settings: `trex config show` lists every setting, its value and its allowed values.
 EOF
 }
 
@@ -103,15 +106,6 @@ BEGIN='-- >>> trex >>>'
 END='-- <<< trex <<<'
 
 live_config() { printf '%s\n' "${REX_CONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/rex/init.lua}"; }
-
-main_checkout() {
-  local common
-  if common=$(git -C "$TREX_DIR" rev-parse --path-format=absolute --git-common-dir 2>/dev/null); then
-    dirname "$common"
-  else
-    printf '%s\n' "$TREX_DIR"
-  fi
-}
 
 lua_string() { # escapes $1 for a double-quoted Lua string
   local s=${1//\\/\\\\}

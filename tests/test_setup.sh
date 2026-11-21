@@ -61,7 +61,7 @@ esac'
 # Runs setup with the fake world; sets $OUT and $STATUS. Input comes from $ANSWER.
 run_setup() {
   OUT=$(printf '%s' "${ANSWER:-}" | env -i LOG="$LOG" HOME="$T/home" PATH="$T/bin:/usr/bin:/bin" REX="$T/bin/rex" \
-    TREX_APPLICATIONS="$T/apps" "$TREX_ROOT/bin/trex" setup --config "$CONFIG" --repo "$TREX_ROOT" "$@" 2>&1)
+    TREX_APPLICATIONS="$T/apps" TREX_BIN_DIR="${LINK_DIR:-$T/linkbin}" "$TREX_ROOT/bin/trex" setup --config "$CONFIG" --repo "$TREX_ROOT" "$@" 2>&1)
   STATUS=$?
 }
 
@@ -227,6 +227,55 @@ test_setup_creates_the_config_and_schema_without_overwriting() {
   rm -rf "$dir"
   run_setup --dry-run; assert_contains "$OUT" "config: would" "dry run plans it"
   [ -e "$dir" ] && fail "dry run created $dir"
+  done_world
+}
+
+# trex on PATH: ~/.local/bin/trex (here $T/linkbin, via TREX_BIN_DIR) links to bin/trex.
+test_setup_links_trex_into_the_bin_dir_and_is_idempotent() {
+  new_world; fake_chrome; fake_cargo; crates2 "$SETUP_SOURCE"
+  run_setup; assert_status_code 0 "first run"
+  assert_contains "$OUT" "trex link: installed" "link created"
+  assert_eq "$TREX_ROOT/bin/trex" "$(readlink "$T/linkbin/trex")" "points at the checkout's bin/trex"
+  assert_contains "$OUT" "is not on your PATH" "the bin dir isn't on PATH, so setup says how to add it"
+  assert_contains "$OUT" 'export PATH="'"$T"'/linkbin:$PATH"' "with the line to add"
+  run_setup; assert_status_code 0 "second run"
+  assert_contains "$OUT" "trex link: ok" "already right"
+  assert_eq "$TREX_ROOT/bin/trex" "$(readlink "$T/linkbin/trex")" "still the same link"
+  [ ! -e "$T/home/.local" ] || fail "setup touched the scratch HOME's .local"
+  done_world
+}
+
+test_setup_says_nothing_about_path_when_the_bin_dir_is_on_it() {
+  new_world; fake_chrome; fake_cargo; crates2 "$SETUP_SOURCE"
+  mkdir "$T/linkbin"
+  OUT=$(env -i LOG="$LOG" HOME="$T/home" PATH="$T/linkbin:$T/bin:/usr/bin:/bin" REX="$T/bin/rex" TREX_APPLICATIONS="$T/apps" \
+    TREX_BIN_DIR="$T/linkbin" "$TREX_ROOT/bin/trex" setup --config "$CONFIG" --repo "$TREX_ROOT" 2>&1)
+  STATUS=$?
+  assert_status_code 0 "run"
+  assert_contains "$OUT" "trex link: installed" "link created"
+  case "$OUT" in *"not on your PATH"*) fail "warned although the bin dir is on PATH: $OUT" ;; esac
+  done_world
+}
+
+test_setup_leaves_another_trex_in_the_bin_dir_alone() {
+  new_world; fake_chrome; fake_cargo; crates2 "$SETUP_SOURCE"
+  mkdir "$T/linkbin"
+  printf 'mine\n' >"$T/linkbin/trex"
+  run_setup; assert_status_code 0 "a file there is not a failure"
+  assert_contains "$OUT" "trex link: skipped" "says it skipped"
+  assert_eq "mine" "$(cat "$T/linkbin/trex")" "the file is untouched"
+  rm "$T/linkbin/trex"; ln -s /nonexistent/trex "$T/linkbin/trex"
+  run_setup; assert_status_code 0 "another link is not a failure"
+  assert_contains "$OUT" "trex link: skipped" "skipped again"
+  assert_eq "/nonexistent/trex" "$(readlink "$T/linkbin/trex")" "the other link is untouched"
+  done_world
+}
+
+test_setup_dry_run_does_not_link() {
+  new_world; fake_chrome; fake_cargo; crates2 "$SETUP_SOURCE"
+  run_setup --dry-run; assert_status_code 0 "dry run"
+  assert_contains "$OUT" "trex link: would" "link planned"
+  [ ! -e "$T/linkbin" ] || fail "dry run created the bin dir"
   done_world
 }
 

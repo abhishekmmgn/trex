@@ -280,6 +280,108 @@ function M.format(path, result)
   return table.concat(out, "\n")
 end
 
+-- --- listing the settings ----------------------------------------------------------
+
+-- Every setting the schema has, sorted by key: { key, default, enum, summary }. Nothing
+-- is listed by hand, so a new setting in the schema shows up in `trex config show`.
+function M.rows()
+  local out = {}
+  local nodes = leaves(schema(), "", {})
+  for _, key in ipairs(sorted_keys(nodes)) do
+    local node = nodes[key]
+    local allowed = node.enum
+    if allowed == nil and node.type == "boolean" then allowed = { true, false } end
+    out[#out + 1] = { key = key, default = node.default, enum = allowed, summary = node["x-summary"] or "" }
+  end
+  return out
+end
+
+local MAX_VALUE = 40
+
+local function display(v)
+  local text = type(v) == "string" and v or show(v)
+  if #text > MAX_VALUE then text = text:sub(1, MAX_VALUE - 3) .. "..." end
+  return text
+end
+
+local function pad(text, width) return text .. string.rep(" ", width - #text) end
+
+-- The settings as aligned rows. `values` (flat, key → value) is what is in effect: a row
+-- that differs from its default gets a `*`. Without `values`, the rows show the
+-- defaults and no marks (for --help). Returns the text and whether any row is marked.
+function M.table(values)
+  local rows = M.rows()
+  local keyw, valw, enumw = 0, 0, 0
+  local cells = {}
+  for i, row in ipairs(rows) do
+    local value = values and values[row.key]
+    if value == nil then value = row.default end
+    local allowed = ""
+    if row.enum ~= nil then
+      local items = {}
+      for _, item in ipairs(row.enum) do items[#items + 1] = display(item) end
+      allowed = "(" .. table.concat(items, " | ") .. ")"
+    end
+    local changed = values ~= nil and value ~= row.default
+    local summary = row.summary
+    if changed then summary = summary .. "; default " .. display(row.default) end
+    cells[i] = { key = row.key, value = display(value), allowed = allowed, summary = summary, changed = changed }
+    keyw, valw, enumw = math.max(keyw, #row.key), math.max(valw, #cells[i].value), math.max(enumw, #allowed)
+  end
+  local lines, any = {}, false
+  for _, c in ipairs(cells) do
+    any = any or c.changed
+    lines[#lines + 1] = (c.changed and "* " or "  ") .. pad(c.key, keyw) .. "  " .. pad(c.value, valw) .. "  "
+      .. pad(c.allowed, enumw) .. "  " .. c.summary
+  end
+  return table.concat(lines, "\n"), any
+end
+
+local function tilde(path)
+  local home = os.getenv("HOME")
+  if home ~= nil and home ~= "" and path:sub(1, #home + 1) == home .. "/" then return "~" .. path:sub(#home + 1) end
+  return path
+end
+
+-- The text of `trex config show`. `held` is the settings the Rex server holds (flat), or
+-- nil when it couldn't be reached, when the file's own values are shown instead.
+function M.report(path, held)
+  local text = util.read(path)
+  local file = text and M.inspect(text)
+  local values, notes = held, {}
+  if held == nil then
+    values = file and not file.blocking and file.settings or nil
+    if file ~= nil and file.blocking then
+      notes[#notes + 1] = "The file has problems, and Rex isn't reachable, so these are the defaults. `trex config check` lists the problems."
+    else
+      notes[#notes + 1] = "Rex isn't reachable (or trex isn't installed in it: `trex install`), so these are "
+        .. (file and "the values in the file (the defaults for what it leaves out)." or "the defaults: there is no config file yet.")
+    end
+  elseif file ~= nil and file.blocking then
+    notes[#notes + 1] = "The file has problems, so the last good settings are in effect. `trex config check` lists them."
+  elseif file ~= nil then
+    for key, v in pairs(file.settings) do
+      if held[key] ~= v then
+        notes[#notes + 1] = "The file differs from what Rex uses. `trex config reload` applies it."
+        break
+      end
+    end
+  end
+  local body, any = M.table(values)
+  local out = { tilde(path), "" }
+  for _, note in ipairs(notes) do out[#out + 1] = note end
+  if #notes > 0 then out[#out + 1] = "" end
+  out[#out + 1] = body
+  out[#out + 1] = ""
+  out[#out + 1] = (any and "* changed from the default. " or "") .. "Edit with `trex config edit`."
+  return table.concat(out, "\n")
+end
+
+-- For `--help`: the settings with their defaults and allowed values, no current values.
+function M.help_rows()
+  return (M.table(nil))
+end
+
 -- --- the settings the server holds ------------------------------------------------
 
 -- A config reading `path`, remembering the last good copy of the file in `last_good`

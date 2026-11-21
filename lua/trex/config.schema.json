@@ -12,12 +12,14 @@
     "default_url": {
       "type": "string",
       "default": "http://localhost:3000",
+      "x-summary": "what Open Browser opens on an empty answer",
       "description": "The address an empty answer opens in Trex: Open Browser…. Default http://localhost:3000."
     },
     "open_in": {
       "type": "string",
       "enum": ["split", "window"],
       "default": "split",
+      "x-summary": "where a Browser Pane opens",
       "description": "Where Trex: Open Browser… opens a Browser Pane. \"split\": to the right of the focused pane. \"window\": in a new Rex window."
     },
     "devtools": {
@@ -29,6 +31,7 @@
           "type": "string",
           "enum": ["below", "above", "right", "left"],
           "default": "below",
+          "x-summary": "which side of its Browser Pane DevTools opens on",
           "description": "Which side of its Browser Pane a DevTools Pane opens on. Moving a DevTools Pane is remembered for the next one, until you change this value."
         }
       }
@@ -41,6 +44,7 @@
         "stay_on": {
           "type": "boolean",
           "default": true,
+          "x-summary": "keep picking after a pick, until Esc",
           "description": "true: pick mode stays on after a pick, so you can hand off several elements in a row. false: it ends after one pick."
         }
       }
