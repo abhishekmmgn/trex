@@ -72,7 +72,7 @@ changing trex's Lua.
 ## Use
 
 - **Trex: Open Browser…** (`cmd+shift+b`): asks for a URL (the field starts empty; `localhost:3000` is the hint) and opens a Browser Pane, `kb --devtools URL`, to the right
-  of the focused pane. An empty answer opens the default. A bare port such as `3000` or `:3000` opens `http://localhost:3000`. Input starting with `-`
+  of the focused pane (with `open_in` set to `"window"` in the config, in a new Rex window of the session, focused). An empty answer opens the default. A bare port such as `3000` or `:3000` opens `http://localhost:3000`. Input starting with `-`
   is refused, because kb would read it as a flag. If the installed kb isn't the pinned commit, it says so and doesn't open.
 - **F12** or **`cmd+shift+i`** in a Browser Pane, or **Trex: Toggle DevTools** from the palette: opens a DevTools Pane beside it, with Chrome DevTools for that pane's
   page, and leaves focus in the Browser Pane. F12 again, in the Browser Pane or the DevTools Pane, closes it. The pane is labelled
@@ -128,7 +128,10 @@ changing trex's Lua.
 
 trex's settings are in `~/.config/trex/config.json` (`$XDG_CONFIG_HOME/trex/config.json`), next to `config.schema.json`, which gives editors
 completion, hover help and red squiggles (ADR-0003). `bin/trex setup` creates both with every default written out. It never overwrites an existing
-config, and it refreshes the schema. A missing file means all defaults, and a missing key gets its default. No setting changes behaviour yet.
+config, and it refreshes the schema. A missing file means all defaults, and a missing key gets its default. So far `open_in` changes behaviour: `"split"` (default) opens a Browser Pane right of the focused pane, `"window"` in a new
+Rex window of the focused pane's session. A Browser Pane in its own window keeps its DevTools Pane in that window. F12 works there, and Pick Element and
+`trex browser` from an Agent Pane in another window find it while the session has one Browser Pane (with two in other windows they list both and ask
+for `trex ctl -i ID`).
 
 ```json
 { "$schema": "./config.schema.json", "default_url": "http://localhost:3000", "open_in": "split",

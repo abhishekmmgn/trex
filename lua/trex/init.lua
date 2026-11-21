@@ -71,7 +71,22 @@ function M.setup(opts)
     state_path = state_path,
   }
 
-  -- Opens a Browser Pane: kb --devtools URL in a split right of the focused pane.
+  -- Where a Browser Pane goes, by the open_in setting: "window" is a new Rex window (tab) in the
+  -- focused pane's session, focused; "split" (or no focused pane) is right of the focused pane.
+  local function place_browser(ctx, layout)
+    if ctx.block_id == nil or config.get("open_in") == "window" then
+      return rex.session.new_window{ label = "trex browser", layout = layout, focus = true }
+    end
+    return rex.session.new_split{
+      anchor_id = ctx.block_id,
+      direction = "horizontal",
+      side = "after",
+      focus = true,
+      layout = layout,
+    }
+  end
+
+  -- Opens a Browser Pane: kb --devtools URL, placed by place_browser.
   local function open_browser(ctx, address)
     local target, why = url.normalise(address, DEFAULT_URL)
     if target == nil then error(why, 0) end
@@ -79,18 +94,7 @@ function M.setup(opts)
 
     local layout = { block = { flavor = util.SHELL, label = "trex browser",
       options = { command = { kb_bin, "--devtools", target } } } }
-    local r, err
-    if ctx.block_id == nil then
-      r, err = rex.session.new_window{ label = "trex browser", layout = layout, focus = true }
-    else
-      r, err = rex.session.new_split{
-        anchor_id = ctx.block_id,
-        direction = "horizontal",
-        side = "after",
-        focus = true,
-        layout = layout,
-      }
-    end
+    local r, err = place_browser(ctx, layout)
     if err ~= nil or r == nil then error("trex: couldn't open a pane: " .. tostring(err), 0) end
     local block_id = r.block_ids and r.block_ids[1]
     return { block_id = block_id, url = target }
