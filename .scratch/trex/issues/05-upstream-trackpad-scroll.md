@@ -10,3 +10,6 @@
 - [ ] KittyBrowser's own tests and CI checks pass on the branch
 - [ ] The user has been asked, and agreed, before the pull request is opened on `graiz/kittybrowser`
 - [ ] The pull request is open upstream
+
+## Comments
+- 2026-11-21: fix committed locally in `/Users/abhishekmmgn/Projects/trex-browser`, branch `trackpad-scroll-delta` (9671b44); CI checks pass. The user tried it: it works, though not quite as smooth as a real browser. The user said not to push or open the PR for now.

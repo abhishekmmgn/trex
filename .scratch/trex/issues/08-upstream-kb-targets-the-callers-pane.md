@@ -10,7 +10,11 @@ Possible shapes (for the upstream discussion, pick one):
 
 **Blocked by:** none (upstream conventions in kb's `AGENTS.md` / `.github/CONTRIBUTING.md`)
 
-**Status:** needs-triage
+**Status:** ready-for-agent
 
 - [ ] An upstream PR (or issue, if the maintainer prefers to discuss first) proposes one of the shapes above
 - [ ] Once merged and the pin moves, `bin/trex ctl`/`mcp` either go away or become thin aliases
+
+## Comments
+
+- 2026-11-21: the user chose to send this as a second upstream PR, separate from 05. Shape: the first one (`control::connect` prefers the kb in the caller's Rex window), which also covers `kb mcp serve` started from the Agent Pane.

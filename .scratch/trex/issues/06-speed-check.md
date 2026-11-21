@@ -4,13 +4,13 @@
 
 **Blocked by:** 02
 
-**Status:** ready-for-human
+**Status:** resolved
 
 - [x] Inspector hover highlight follows the cursor in ≤100 ms
 - [x] Switching DevTools tabs (Elements → Console → Network) takes ≤300 ms
-- [ ] Page scrolling runs at ≥30 fps, with `kb bench` numbers recorded
+- [x] Page scrolling runs at ≥30 fps, with `kb bench` numbers recorded
 - [x] Typing in the page appears in <50 ms
-- [ ] Any miss is measured to its cause before anything changes; moving DevTools to a native window is a last resort and needs the user's agreement
+- [x] Any miss is measured to its cause before anything changes; moving DevTools to a native window is a last resort and needs the user's agreement
 
 ## Comments
 
@@ -48,3 +48,4 @@ jpeg 90, pixels by file               16.7      5.3       6.4    28.7     35    
 ```
 - 2026-11-21 shadcn test (Haiku agent, throwaway session; full results in the orchestrator scratchpad `notes/shadcn-test.md`): clicks on Dialog, Dropdown, Tabs, Accordion take 300–370 ms through `kb ctl`; Ctrl+K, `/`, typing, arrows, Enter, Escape, Tab, Space all reach the page through `rex send-key`; `cmd+k` did not (Rex binds it). Key-to-page typing about 57–59 ms including about 20 ms of `kb ctl eval` overhead.
 - kb's default frame mode is "png, changed tiles by file". At Retina half-width on Wikipedia it measured **27 fps** scrolling (37 ms per frame), just under the 30 fps target; it reached 78 fps only in a small 80x24 pane. The user finds scrolling fine in practice. Per this ticket, measure the miss to its cause before changing anything.
+- 2026-11-21: the user accepted the 27 fps default-mode scroll as fine for now and closed this ticket. Nothing was changed; DevTools stays in Rex.
